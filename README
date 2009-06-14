@@ -1,0 +1,2 @@
+Currently under development -- persistent-sheeple allows you to create sheeple objects that are
+automatically persisted to a couchdb database.
