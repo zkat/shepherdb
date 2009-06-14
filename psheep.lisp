@@ -47,6 +47,23 @@
 ;; 5. sequentially rebuild all sheeple by just calling spawn-sheep
 
 (defgeneric sheep->alist (sheep))
+(defmethod sheep->alist ((sheep standard-sheep))
+  (let ((parents (sheep-direct-parents sheep))
+        (properties (loop for property in (sheep-direct-properties sheep)
+                       collect (list (cons :name (sheeple::name property))
+                                     (cons :value (sheeple::value property))
+                                     (cons :readers (sheeple::readers property))
+                                     (cons :writers (sheeple::writers property)))))
+        (metaclass (class-name (class-of sheep)))
+        (nickname (sheep-nickname sheep))
+        (documentation (sheep-documentation sheep)))
+    (list
+     (cons :parents parents)
+     (cons :properties properties)
+     (cons :metaclass metaclass)
+     (cons :nickname nickname)
+     (cons :documentation documentation))))
+
 (defmethod sheep->alist ((sheep persistent-sheep))
   (let ((parents (sheep-direct-parents sheep))
         (properties (loop for property in (sheep-direct-properties sheep)
@@ -64,6 +81,31 @@
      (cons :metaclass metaclass)
      (cons :nickname nickname)
      (cons :documentation documentation))))
+
+(defun alist->sheep (alist)
+  (let ((parents (cdr (assoc :parents alist)))
+        (properties (cdr (assoc :properties alist)))
+        (metaclass (find-class (cdr (assoc :metaclass alist))))
+        (nickname (cdr (assoc :nickname alist)))
+        (dox (cdr (assoc :documentation alist))))
+    (spawn-sheep parents
+                 :metaclass metaclass
+                 :properties (property-alist->property-definition properties)
+                 :nickname nickname
+                 :documentation dox)))
+
+(defun property-alist->property-definition (alist)
+  (mapcar #'format-property-definition-for-defsheep alist))
+(defun format-property-definition-for-defsheep (def)
+  (let ((name (cdr (assoc :name def)))
+        (value (cdr (assoc :value def)))
+        (readers (cdr (assoc :readers def)))
+        (writers (cdr (assoc :writers def))))
+    `(:name ,name :value ,value
+            ,@(when readers
+                    `(:readers ,readers))
+            ,@(when writers
+                    `(:writers ,writers)))))
 
 (defgeneric allocate-sheep-in-database (sheep database))
 (defmethod allocate-sheep-in-database ((sheep persistent-sheep) (db database))
