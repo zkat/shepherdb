@@ -1,3 +1,3 @@
 (defpackage #:persistent-sheeple
-  (:use :cl :sheeple :cl-couchdb)
+  (:use :cl :sheeple :clouchdb)
   (:nicknames :psheep))
