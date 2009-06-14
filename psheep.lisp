@@ -1,3 +1,20 @@
+;;;; This file is part of persistent-sheeple.
+
+;;;; persistent-sheeple is free software: you can redistribute it and/or modify
+;;;; it under the terms of the GNU Lesser General Public License as published by
+;;;; the Free Software Foundation, either version 3 of the License, or
+;;;; (at your option) any later version, with Franz's Preamble.
+
+;;;; persistent-sheeple is distributed in the hope that it will be useful,
+;;;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;;;; GNU Lesser General Public License for more details.
+
+;;;; You should have received a copy of the GNU Lesser General Public License
+;;;; along with persistent-sheeple.  If not, see <http://www.gnu.org/licenses/>.
+;;;; The license, with the Franz preamble, LGPL additional permissions, and full GPL text,
+;;;; should be in a file named COPYING in the root directory of these sources.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (in-package :persistent-sheeple)
 
 ;;;
@@ -24,7 +41,7 @@
          (db-representation (json:encode-json-alist-to-string sheep-alist)))
     (cl-couchdb:save-document (couch db) (db-name db) sheep-alist (sheep-id sheep))))
 
-;; What sheeple needs in order to make a sheep that works the same:
+;; What sheeple needs in order to make a sheep that works (mostly) the same:
 ;; 1. direct-parents
 ;; 2. direct slot definitions
 ;; 3. metaclass
