@@ -20,31 +20,73 @@
 ;;;
 ;;; Database management
 ;;;
-(defvar *db*)
+(defvar *sheep-db*)
 (defclass database ()
-  ((host :accessor host :initarg :host)
-   (port :accessor port :initarg :port)
+  ((host :accessor host :initform "localhost" :initarg :host)
+   (port :accessor port :initform "5984" :initarg :port)
    (db-name :accessor db-name :initarg :db)))
 
-(define-condition invalid-db-error () ())
+(defun load-sheep-db (name &key (hostname "localhost") (port "5984"))
+  (setf *sheep-db* (make-database name :host hostname :port port)))
+
+(defun make-database (db-name &key (host "localhost") (port "5984"))
+  (let ((db (make-instance 'database :db db-name :host host :port port)))
+    (create-db :db-name (db-name db)
+               :if-exists :ignore)
+    db))
+
+(defun use-database (database)
+  (set-connection :host (host database)
+                  :db-name (db-name database)
+                  :port (port database)))
+
+(defmacro with-db (database &body body)
+  `(with-connection (:db-name (db-name ,database) :host (host ,database) :port (port ,database))
+     ,@body))
+
+(defun create-sheep-id-document (database)
+  (with-db database
+    (unless (get-document "%sheep-ids" :if-missing nil)
+      (put-document (list (cons :max-sheep-id 0))
+                    :id "%sheep-ids"))))
+
+(defun max-sheep-id ()
+  (with-db *sheep-db*
+   (document-property :max-sheep-id (get-document "%sheep-ids"))))
+(defun (setf max-sheep-id) (new-value)
+  (create-sheep-id-document *sheep-db*)
+  (with-db *sheep-db*
+    (put-document 
+     (set-document-property (get-document "%sheep-ids")
+                            :max-sheep-id new-value))))
 
 ;;;
 ;;; Persistent-Sheeple
 ;;;
+(defvar *all-sheep* nil)
 (defclass persistent-sheep (standard-sheep)
-  ((db-id :accessor db-id :initarg :db-id)))
+  ((db-id :accessor db-id :initarg :db-id :initform nil)))
 
 (defmethod initialize-instance :after ((sheep persistent-sheep) &key)
-  (allocate-sheep-in-database sheep))
+  (allocate-sheep-in-database sheep *sheep-db*)
+  (pushnew sheep *all-sheep*))
 (defgeneric allocate-sheep-in-database (sheep database))
 (defmethod allocate-sheep-in-database ((sheep persistent-sheep) (db database))
-  (assign-new-db-id sheep)
-  (let* ((sheep-alist (sheep->alist sheep)))
-    (put-document sheep-alist :id (db-id sheep))))
+  (with-db db
+   (assign-new-db-id sheep)
+   (let* ((sheep-alist (sheep->alist sheep)))
+     (put-document sheep-alist :id (db-id sheep)))))
 
 (defun assign-new-db-id (sheep)
-  ;;todo
-  )
+  (unless (db-id sheep)
+    (setf (db-id sheep)
+          (incf (max-sheep-id)))))
+
+(defun find-sheep-with-id (db-id)
+  (find-if (lambda (sheep)
+             (= db-id (db-id sheep)))
+           *all-sheep*))
+
 ;; How to rebuild a sheep object:
 ;;
 ;; Grab this stuff:
@@ -155,40 +197,33 @@ includes reader/writer definitions, it will define new readers/writes for the ne
   (db-entry->lisp-object
    (document-property pname (get-document (db-id sheep)))))
 
-(defun write-property-externally (sheep pname new-value)
-  (let ((value (check-db-digestibility new-value)))
-    (put-document
-     (set-document-property (get-document (db-id sheep))
-                            pname value)
-     :id (db-id sheep))))
+(defun db-entry->lisp-object (entry)
+  (if (db-pointer-p entry)
+      (db-pointer->sheep entry)
+      entry))
 
-(defun check-db-digestibility (object)
-  (etypecase object
-    (persistent-sheep
-     (sheep->db-pointer object))
-    ((or string number keyword symbol)
-     object)
-    (list
-     (mapcar #'check-db-digestibility object))
-    (hash-table
-     (loop for val being the hash-values of object
-          do (check-db-digestibility val))
-     (loop for key being the hash-keys of object
-          do (check-db-digestibility key))
-     object)
-    (vector
-     (map 'list #'check-db-digestibility object))
-    (t
-     (error "~A can't go into the db, sorry bro." object))))
+(defun write-property-externally (sheep pname new-value)
+  (put-document
+   (set-document-property (get-document (db-id sheep))
+                          pname new-value)
+   :id (db-id sheep)))
+
+(defmethod clouchdb:encode ((sheep persistent-sheep) stream)
+  (encode (sheep->db-pointer sheep) stream))
 
 (defun sheep->db-pointer (sheep)
   (let ((alist (sheep->alist sheep)))
     (list
-     (cons (as-keyword-symbol "_persistent_sheep_pointer") (cdr (assoc :db-id alist))))))
-
+     (cons :%persistent-sheep-pointer (cdr (assoc :db-id alist))))))
+(defun db-pointer-p (entry)
+  (if (assoc :%persistent-sheep-pointer entry)
+      t nil))
+(defun db-pointer->sheep (pointer)
+  (let ((db-id (cdr (assoc :%persistent-sheep-pointer pointer))))
+    (find-sheep-with-id db-id)))
 (defun valid-sheep-pointer-p (entry)
-  (let ((got-it? (cdr (assoc (as-keyword-symbol "_persistent_sheep_pointer") entry))))
+  (let ((got-it? (cdr (assoc :%persistent-sheep-pointer entry))))
     (if got-it? t nil)))
 (defun sheep-pointer-p (entry)
-  (let ((got-it? (assoc (as-keyword-symbol "_persistent_sheep_pointer") entry)))
+  (let ((got-it? (assoc :%persistent-sheep-pointer entry)))
     (if got-it? t nil)))
