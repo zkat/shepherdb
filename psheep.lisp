@@ -32,16 +32,22 @@
 ;;; Persistent-Sheeple
 ;;;
 (defclass persistent-sheep (standard-sheep)
-  ((persistent-properties :initform nil :accessor sheep-persistent-properties)
-   (db-id :accessor db-id)))
+  ((db-id :accessor db-id :initarg :db-id)))
 
+(defmethod initialize-instance :after ((sheep persistent-sheep) &key)
+  (allocate-sheep-in-database sheep))
 (defgeneric allocate-sheep-in-database (sheep database))
 (defmethod allocate-sheep-in-database ((sheep persistent-sheep) (db database))
-  #-(and) (let* ((sheep-alist (sheep->alist sheep))
-         (db-representation (json:encode-json-alist-to-string sheep-alist)))
-    (cl-couchdb:save-document (couch db) (db-name db) sheep-alist (sheep-id sheep))))
+  (assign-new-db-id sheep)
+  (let* ((sheep-alist (sheep->alist sheep)))
+    (put-document sheep-alist :id (db-id sheep))))
 
-;; What sheeple needs in order to make a sheep that works (mostly) the same:
+(defun assign-new-db-id (sheep)
+  ;;todo
+  )
+;; How to rebuild a sheep object:
+;;
+;; Grab this stuff:
 ;; 1. direct-parents
 ;; 2. direct slot definitions
 ;; 3. metaclass
@@ -55,10 +61,9 @@
 ;;              :documentation documentation)
 ;;
 ;; That should rebuild the whole thing.
-;; That also means I should probably store property definitions somewhere.
 ;;
 ;; How to rebuild a sheep from a JSON entry:
-;; 1. read in the JSON into protosheep objects/alists/whatever
+;; 1. read in the JSON into a bunch of alists
 ;; 2. figure out all the sheeple that have no direct-parents (in which case they only have =dolly=)
 ;; 3. build those sheeple
 ;; 4. find all the sheeple that depend on those sheeple, and figure out the dependency graph from there
@@ -87,23 +92,32 @@
 
 (defmethod sheep->alist ((sheep persistent-sheep))
   (let ((parents (sheep-direct-parents sheep))
+        ;; build an alist of alists by scanning the property-spec objects
         (properties (loop for property in (sheep-direct-properties sheep)
                        collect (list (cons :name (property-spec-name property))
                                      (cons :value (property-spec-value property))
                                      (cons :readers (property-spec-readers property))
                                      (cons :writers (property-spec-writers property)))))
+        ;; for the class, we just store the symbol
         (metaclass (class-name (class-of sheep)))
         (nickname (sheep-nickname sheep))
-        (documentation (sheep-documentation sheep)))
+        (documentation (sheep-documentation sheep))
+        (id (db-id sheep)))
     (list
+     ;; Because only persistent-sheeple can be turned to JSON, we can't involve standard-sheep
+     ;; objects in this. Thus, we get rid of =dolly=, since we can assume she'll be added
+     ;; upon sheep re-creation.
      (cons :parents (if (eql parents (list =dolly=))
                         nil parents))
      (cons :properties properties)
      (cons :metaclass metaclass)
      (cons :nickname nickname)
-     (cons :documentation documentation))))
+     (cons :documentation documentation)
+     (cons :db-id id))))
 
 (defun alist->sheep (alist)
+  "This function generates a new sheep object based on an ALIST definition. If the definition
+includes reader/writer definitions, it will define new readers/writes for the new sheep object."
   (let ((parents (cdr (assoc :parents alist)))
         (properties (cdr (assoc :properties alist)))
         (metaclass (find-class (cdr (assoc :metaclass alist))))
@@ -132,15 +146,49 @@
 ;;; PSHEEP property access
 ;;;
 (defmethod direct-property-value ((sheep persistent-sheep) property-name)
-  (if (persistent-property-p sheep property-name)
-      (persistent-property-value sheep property-name)
-      (call-next-method)))
+  (read-property-externally sheep property-name))
 
 (defmethod (setf property-value) (new-value (sheep persistent-sheep) property-name)
   (write-property-externally sheep property-name new-value))
-(defgeneric persistent-property-p (sheep property-name))
-(defmethod persistent-property-p ((sheep persistent-sheep) property-name)
-  t)
 
-(defun persistent-property-value (sheep property-name)
-  (read-property-externally sheep property-name))
+(defun read-property-externally (sheep pname)
+  (db-entry->lisp-object
+   (document-property pname (get-document (db-id sheep)))))
+
+(defun write-property-externally (sheep pname new-value)
+  (let ((value (check-db-digestibility new-value)))
+    (put-document
+     (set-document-property (get-document (db-id sheep))
+                            pname value)
+     :id (db-id sheep))))
+
+(defun check-db-digestibility (object)
+  (etypecase object
+    (persistent-sheep
+     (sheep->db-pointer object))
+    ((or string number keyword symbol)
+     object)
+    (list
+     (mapcar #'check-db-digestibility object))
+    (hash-table
+     (loop for val being the hash-values of object
+          do (check-db-digestibility val))
+     (loop for key being the hash-keys of object
+          do (check-db-digestibility key))
+     object)
+    (vector
+     (map 'list #'check-db-digestibility object))
+    (t
+     (error "~A can't go into the db, sorry bro." object))))
+
+(defun sheep->db-pointer (sheep)
+  (let ((alist (sheep->alist sheep)))
+    (list
+     (cons (as-keyword-symbol "_persistent_sheep_pointer") (cdr (assoc :db-id alist))))))
+
+(defun valid-sheep-pointer-p (entry)
+  (let ((got-it? (cdr (assoc (as-keyword-symbol "_persistent_sheep_pointer") entry))))
+    (if got-it? t nil)))
+(defun sheep-pointer-p (entry)
+  (let ((got-it? (assoc (as-keyword-symbol "_persistent_sheep_pointer") entry)))
+    (if got-it? t nil)))
