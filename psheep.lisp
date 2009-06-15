@@ -32,6 +32,7 @@
 
 (defun load-sheep-db (name &key (hostname "localhost") (port "5984"))
   (let ((db (make-database name :host hostname :port port)))
+    (use-database db)
     (with-db db
       (unless (get-document "sheep-id-info" :if-missing nil)
         (create-sheep-id-document db)))
@@ -224,8 +225,7 @@ includes reader/writer definitions, it will define new readers/writes for the ne
 (defun write-property-externally (sheep pname new-value)
   (put-document
    (set-document-property (get-document (db-id sheep))
-                          pname new-value)
-   :id (db-id sheep)))
+                          pname new-value)))
 
 (defmethod clouchdb:encode ((sheep persistent-sheep) stream)
   (encode (sheep->db-pointer sheep) stream))
