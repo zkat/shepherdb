@@ -14,6 +14,10 @@
 ;;;; along with persistent-sheeple.  If not, see <http://www.gnu.org/licenses/>.
 ;;;; The license, with the Franz preamble, LGPL additional permissions, and full GPL text,
 ;;;; should be in a file named COPYING in the root directory of these sources.
+;;;;
+;;;; TODO
+;;;; - Try getting persistent-sheep objects to automatically load to the DB. Check the dumped data.
+;;;; - Once that's done, use the dumped data to reliably reload the objects on startup.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (in-package :persistent-sheeple)
 
@@ -27,7 +31,12 @@
    (db-name :accessor db-name :initarg :db)))
 
 (defun load-sheep-db (name &key (hostname "localhost") (port "5984"))
-  (setf *sheep-db* (make-database name :host hostname :port port)))
+  (let ((db (make-database name :host hostname :port port)))
+    (with-db db
+      (unless (get-document "sheep-id-info" :if-missing nil)
+        (create-sheep-id-document db)))
+    (setf *sheep-db* db)
+    db))
 
 (defun make-database (db-name &key (host "localhost") (port "5984"))
   (let ((db (make-instance 'database :db db-name :host host :port port)))
@@ -46,30 +55,40 @@
 
 (defun create-sheep-id-document (database)
   (with-db database
-    (unless (get-document "%sheep-ids" :if-missing nil)
+    (unless (get-document "sheep-id-info" :if-missing nil)
       (put-document (list (cons :max-sheep-id 0))
-                    :id "%sheep-ids"))))
+                    :id "sheep-id-info"))))
 
 (defun max-sheep-id ()
   (with-db *sheep-db*
-   (document-property :max-sheep-id (get-document "%sheep-ids"))))
+   (document-property :max-sheep-id (get-document "sheep-id-info"))))
 (defun (setf max-sheep-id) (new-value)
   (create-sheep-id-document *sheep-db*)
   (with-db *sheep-db*
     (put-document 
-     (set-document-property (get-document "%sheep-ids")
-                            :max-sheep-id new-value))))
+     (set-document-property (get-document "sheep-id-info")
+                            :max-sheep-id new-value)))
+  new-value)
 
 ;;;
 ;;; Persistent-Sheeple
 ;;;
-(defvar *all-sheep* nil)
+(defvar *all-sheep* nil
+  "This is mostly internal. The only two functions that use it are ALL-SHEEP
+and initialize-instance. Users shouldn't touch this.")
+(defun all-sheep ()
+  *all-sheep*)
 (defclass persistent-sheep (standard-sheep)
   ((db-id :accessor db-id :initarg :db-id :initform nil)))
-
+(defmethod print-object ((sheep persistent-sheep) stream)
+  (print-unreadable-object (sheep stream :identity t)
+    (format stream "Persistent Sheep ID: ~A~@[ AKA: ~A~]" (db-id sheep) (sheep-nickname sheep))))
 (defmethod initialize-instance :after ((sheep persistent-sheep) &key)
   (allocate-sheep-in-database sheep *sheep-db*)
   (pushnew sheep *all-sheep*))
+
+(defmacro pclone (sheeple properties &rest options)
+  `(clone ,sheeple ,properties ,@options (:metaclass 'persistent-sheep)))
 (defgeneric allocate-sheep-in-database (sheep database))
 (defmethod allocate-sheep-in-database ((sheep persistent-sheep) (db database))
   (with-db db
@@ -85,7 +104,7 @@
 (defun find-sheep-with-id (db-id)
   (find-if (lambda (sheep)
              (= db-id (db-id sheep)))
-           *all-sheep*))
+           (all-sheep)))
 
 ;; How to rebuild a sheep object:
 ;;
@@ -222,7 +241,7 @@ includes reader/writer definitions, it will define new readers/writes for the ne
   (let ((db-id (cdr (assoc :%persistent-sheep-pointer pointer))))
     (find-sheep-with-id db-id)))
 (defun valid-sheep-pointer-p (entry)
-  (let ((got-it? (cdr (assoc :%persistent-sheep-pointer entry))))
+  (let ((got-it? (numberp (cdr (assoc :%persistent-sheep-pointer entry)))))
     (if got-it? t nil)))
 (defun sheep-pointer-p (entry)
   (let ((got-it? (assoc :%persistent-sheep-pointer entry)))
