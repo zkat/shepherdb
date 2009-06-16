@@ -31,16 +31,15 @@
 (defclass database ()
   ((host :accessor host :initform "localhost" :initarg :host)
    (port :accessor port :initform "5984" :initarg :port)
-   (db-name :accessor db-name :initarg :db)))
+   (db-name :accessor db-name :initarg :db)
+   (max-sheep-id :accessor %max-sheep-id :initform 0)))
 
 (defun load-sheep-db (name &key (hostname "localhost") (port "5984"))
   (let ((db (make-database name :host hostname :port port)))
     (use-database db)
-    (with-db db
-      (unless (get-document "sheep-id-info" :if-missing nil)
-        (create-sheep-id-document db))
-      (load-sheeple-from-database db))
     (setf *sheep-db* db)
+    (with-db db
+      (reload-sheeple-from-database db))
     db))
 
 (defun make-database (db-name &key (host "localhost") (port "5984"))
@@ -54,21 +53,10 @@
                   :db-name (db-name database)
                   :port (port database)))
 
-(defun create-sheep-id-document (database)
-  (with-db database
-    (unless (get-document "sheep-id-info" :if-missing nil)
-      (put-document (list (cons :max-sheep-id 0))
-                    :id "sheep-id-info"))))
-
 (defun max-sheep-id ()
-  (with-db *sheep-db*
-   (document-property :max-sheep-id (get-document "sheep-id-info"))))
+  (%max-sheep-id *sheep-db*))
 (defun (setf max-sheep-id) (new-value)
-  (create-sheep-id-document *sheep-db*)
-  (with-db *sheep-db*
-    (put-document 
-     (set-document-property (get-document "sheep-id-info")
-                            :max-sheep-id new-value)))
+  (incf (%max-sheep-id *sheep-db*))
   new-value)
 
 ;;;
@@ -85,7 +73,7 @@
 (defun all-sheep ()
   *all-sheep*)
 
-(defmethod initialize-instance :after ((sheep persistent-sheep))
+(defmethod initialize-instance :after ((sheep persistent-sheep) &key)
   (allocate-sheep-in-database sheep *sheep-db*)
   (pushnew sheep *all-sheep*))
 
@@ -181,6 +169,9 @@
 includes reader/writer definitions, it will define new readers/writes for the new sheep object."
   (with-db database
     (let ((alist (get-document doc-id)))
+      (alist->sheep alist))))
+
+(defun alist->sheep (alist)
      (let ((parents (cdr (assoc :parents alist)))
            (properties (cdr (assoc :properties alist)))
            (metaclass (find-class (read-from-string (cdr (assoc :metaclass alist)))))
@@ -190,7 +181,7 @@ includes reader/writer definitions, it will define new readers/writes for the ne
                     :metaclass metaclass
                     :properties (property-alist->property-definition properties)
                     :nickname nickname
-                    :documentation dox)))))
+                    :documentation dox)))
 
 (defun property-alist->property-definition (alist)
   (mapcar #'format-property-definition-for-defsheep alist))
@@ -251,3 +242,18 @@ includes reader/writer definitions, it will define new readers/writes for the ne
 (defun sheep-pointer-p (entry)
   (let ((got-it? (assoc :%persistent-sheep-pointer entry)))
     (if got-it? t nil)))
+
+(defun reload-sheeple-from-database (database)
+  (let ((sorted-spec (sort (get-all-sheep-specs-from-db database) 
+                           #'< :key (lambda (spec)
+                                      (read-from-string (cdr (assoc :|id| spec)))))))
+    (loop for spec in sorted-spec
+       do (let ((db-id (read-from-string (cdr (assoc :|id| spec)))))
+            (loop until (= db-id (1- (%max-sheep-id database)))
+               do (incf (%max-sheep-id database)))
+            (document->sheep db-id database))))
+  (all-sheep))
+
+(defun get-all-sheep-specs-from-db (database)
+  (with-db database
+    (cdr (assoc :|rows| (get-all-documents)))))
