@@ -207,16 +207,20 @@ includes reader/writer definitions, it will define new readers/writes for the ne
 ;;;
 ;;; PSHEEP property access
 ;;;
-(defmethod direct-property-value ((sheep persistent-sheep) property-name)
+(defmethod sheeple:direct-property-value ((sheep persistent-sheep) property-name)
   (read-property-externally sheep property-name))
 
 (defmethod (setf property-value) (new-value (sheep persistent-sheep) property-name)
-  (write-property-externally sheep property-name new-value))
+  (write-property-externally sheep property-name new-value)
+  new-value)
 
 (defun read-property-externally (sheep pname)
-  (db-entry->lisp-object
-   (document-property pname (get-document (db-id sheep)))))
-
+  (multiple-value-bind (value hasp)
+      (document-property pname (get-document (db-id sheep)))
+    (if hasp
+        (values (db-entry->lisp-object value) t)
+        (values nil nil))))
+ 
 (defun db-entry->lisp-object (entry)
   (if (db-pointer-p entry)
       (db-pointer->sheep entry)
@@ -235,7 +239,7 @@ includes reader/writer definitions, it will define new readers/writes for the ne
     (list
      (cons :%persistent-sheep-pointer (cdr (assoc :db-id alist))))))
 (defun db-pointer-p (entry)
-  (if (assoc :%persistent-sheep-pointer entry)
+  (if (and (listp entry) (assoc :%persistent-sheep-pointer entry))
       t nil))
 (defun db-pointer->sheep (pointer)
   (let ((db-id (cdr (assoc :%persistent-sheep-pointer pointer))))
