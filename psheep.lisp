@@ -25,6 +25,9 @@
 ;;; Database management
 ;;;
 (defvar *sheep-db*)
+(defmacro with-db (database &body body)
+  `(with-connection (:db-name (db-name ,database) :host (host ,database) :port (port ,database))
+     ,@body))
 (defclass database ()
   ((host :accessor host :initform "localhost" :initarg :host)
    (port :accessor port :initform "5984" :initarg :port)
@@ -35,7 +38,8 @@
     (use-database db)
     (with-db db
       (unless (get-document "sheep-id-info" :if-missing nil)
-        (create-sheep-id-document db)))
+        (create-sheep-id-document db))
+      (load-sheeple-from-database db))
     (setf *sheep-db* db)
     db))
 
@@ -49,10 +53,6 @@
   (set-connection :host (host database)
                   :db-name (db-name database)
                   :port (port database)))
-
-(defmacro with-db (database &body body)
-  `(with-connection (:db-name (db-name ,database) :host (host ,database) :port (port ,database))
-     ,@body))
 
 (defun create-sheep-id-document (database)
   (with-db database
@@ -77,6 +77,11 @@
 (defvar *all-sheep* nil
   "This is mostly internal. The only two functions that use it are ALL-SHEEP
 and initialize-instance. Users shouldn't touch this.")
+(defun load-sheeple-from-database (db)
+  ;; TODO - don't run this yet
+  (with-db db
+    ))
+
 (defun all-sheep ()
   *all-sheep*)
 (defclass persistent-sheep (standard-sheep)
