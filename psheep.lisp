@@ -74,22 +74,18 @@
 ;;;
 ;;; Persistent-Sheeple
 ;;;
-(defvar *all-sheep* nil
-  "This is mostly internal. The only two functions that use it are ALL-SHEEP
-and initialize-instance. Users shouldn't touch this.")
-(defun load-sheeple-from-database (db)
-  ;; TODO - don't run this yet
-  (with-db db
-    ))
-
-(defun all-sheep ()
-  *all-sheep*)
 (defclass persistent-sheep (standard-sheep)
   ((db-id :accessor db-id :initarg :db-id :initform nil)))
 (defmethod print-object ((sheep persistent-sheep) stream)
   (print-unreadable-object (sheep stream :identity t)
     (format stream "Persistent Sheep ID: ~A~@[ AKA: ~A~]" (db-id sheep) (sheep-nickname sheep))))
-(defmethod initialize-instance :after ((sheep persistent-sheep) &key)
+
+(defvar *all-sheep* nil
+  "all the sheep objects that are currently loaded.")
+(defun all-sheep ()
+  *all-sheep*)
+
+(defmethod initialize-instance :after ((sheep persistent-sheep))
   (allocate-sheep-in-database sheep *sheep-db*)
   (pushnew sheep *all-sheep*))
 
@@ -98,9 +94,9 @@ and initialize-instance. Users shouldn't touch this.")
 (defgeneric allocate-sheep-in-database (sheep database))
 (defmethod allocate-sheep-in-database ((sheep persistent-sheep) (db database))
   (with-db db
-   (assign-new-db-id sheep)
-   (let* ((sheep-alist (sheep->alist sheep)))
-     (put-document sheep-alist :id (db-id sheep)))))
+    (assign-new-db-id sheep)
+    (let* ((sheep-alist (sheep->alist sheep)))
+      (put-document sheep-alist :id (db-id sheep)))))
 
 (defun assign-new-db-id (sheep)
   (unless (db-id sheep)
@@ -168,8 +164,7 @@ and initialize-instance. Users shouldn't touch this.")
         ;; for the class, we just store the symbol
         (metaclass (class-name (class-of sheep)))
         (nickname (sheep-nickname sheep))
-        (documentation (sheep-documentation sheep))
-        (id (db-id sheep)))
+        (documentation (sheep-documentation sheep)))
     (list
      ;; Because only persistent-sheeple can be turned to JSON, we can't involve standard-sheep
      ;; objects in this. Thus, we get rid of =dolly=, since we can assume she'll be added
@@ -179,22 +174,23 @@ and initialize-instance. Users shouldn't touch this.")
      (cons :properties properties)
      (cons :metaclass metaclass)
      (cons :nickname nickname)
-     (cons :documentation documentation)
-     (cons :db-id id))))
+     (cons :documentation documentation))))
 
-(defun alist->sheep (alist)
+(defun document->sheep (doc-id database)
   "This function generates a new sheep object based on an ALIST definition. If the definition
 includes reader/writer definitions, it will define new readers/writes for the new sheep object."
-  (let ((parents (cdr (assoc :parents alist)))
-        (properties (cdr (assoc :properties alist)))
-        (metaclass (find-class (cdr (assoc :metaclass alist))))
-        (nickname (cdr (assoc :nickname alist)))
-        (dox (cdr (assoc :documentation alist))))
-    (spawn-sheep parents
-                 :metaclass metaclass
-                 :properties (property-alist->property-definition properties)
-                 :nickname nickname
-                 :documentation dox)))
+  (with-db database
+    (let ((alist (get-document doc-id)))
+     (let ((parents (cdr (assoc :parents alist)))
+           (properties (cdr (assoc :properties alist)))
+           (metaclass (find-class (read-from-string (cdr (assoc :metaclass alist)))))
+           (nickname (cdr (assoc :nickname alist)))
+           (dox (cdr (assoc :documentation alist))))
+       (spawn-sheep parents
+                    :metaclass metaclass
+                    :properties (property-alist->property-definition properties)
+                    :nickname nickname
+                    :documentation dox)))))
 
 (defun property-alist->property-definition (alist)
   (mapcar #'format-property-definition-for-defsheep alist))
