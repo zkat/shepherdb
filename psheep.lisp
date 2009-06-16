@@ -83,8 +83,9 @@
 (defmethod allocate-sheep-in-database ((sheep persistent-sheep) (db database))
   (with-db db
     (assign-new-db-id sheep)
-    (let* ((sheep-alist (sheep->alist sheep)))
-      (put-document sheep-alist :id (db-id sheep)))))
+    (unless (get-document (db-id sheep) :if-missing nil)
+      (let* ((sheep-alist (sheep->alist sheep)))
+        (put-document sheep-alist :id (db-id sheep))))))
 
 (defun assign-new-db-id (sheep)
   (unless (db-id sheep)
@@ -244,12 +245,14 @@ includes reader/writer definitions, it will define new readers/writes for the ne
     (if got-it? t nil)))
 
 (defun reload-sheeple-from-database (database)
+  ;; TODO: This is fine and dandy as a first step, but this needs to do a lot more
+  ;;       (such as being sorted as a precedence list)
   (let ((sorted-spec (sort (get-all-sheep-specs-from-db database) 
                            #'< :key (lambda (spec)
                                       (read-from-string (cdr (assoc :|id| spec)))))))
     (loop for spec in sorted-spec
        do (let ((db-id (read-from-string (cdr (assoc :|id| spec)))))
-            (loop until (= db-id (1- (%max-sheep-id database)))
+            (loop until (= (1- db-id) (%max-sheep-id database))
                do (incf (%max-sheep-id database)))
             (document->sheep db-id database))))
   (all-sheep))
@@ -257,3 +260,4 @@ includes reader/writer definitions, it will define new readers/writes for the ne
 (defun get-all-sheep-specs-from-db (database)
   (with-db database
     (cdr (assoc :|rows| (get-all-documents)))))
+;; todo: get that programming book
