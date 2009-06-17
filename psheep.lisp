@@ -15,6 +15,7 @@
 ;;;; The license, with the Franz preamble, LGPL additional permissions, and full GPL text,
 ;;;; should be in a file named COPYING in the root directory of these sources.
 ;;;;
+;;;; TODO - why the fuck is :parents always NIL??!
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (in-package :persistent-sheeple)
 
@@ -209,8 +210,7 @@ holds the unique ID of the sheep object in the database."
 (defun sheep->db-pointer (sheep)
   "Sheep pointers, on the lisp side, are one-item alists with the :%persistent-sheep-object keyword
 as a key. The CDR of the pointer cons is the unique database ID of the sheep object."
-  (list
-   (cons :%persistent-sheep-pointer (db-id sheep))))
+  (list (cons :%persistent-sheep-pointer (db-id sheep))))
 
 ;; The difference here is that db-pointer-p checks whether any arbitrary object is a pointer,
 ;; sheep-pointer-p checks that it's actually a sheep pointer (not just an alist), and 
@@ -291,7 +291,8 @@ if no messages have been defined on *sheep*, except for readers/writers provided
   "Called during LOAD-DB, this function reads all entries in DATABASE, and assumes they'll all be
 sheeple. It then takes the specs and reloads them into actual sheep objects. It also takes care
 of setting MAX-SHEEP-ID."
-  (let ((sorted-spec (topologically-sort-sheep-specs (get-all-sheep-specs-from-db database))))
+  (let ((sorted-spec (topologically-sort-sheep-specs
+                      (get-all-sheep-specs-from-db database))))
      (loop for spec in sorted-spec
         do (let ((db-id (read-from-string (cdr (assoc :|id| spec)))))
              (document->sheep db-id database)
@@ -312,19 +313,20 @@ of setting MAX-SHEEP-ID."
 such that iterating over the list and calling alist->sheep on each item generates new sheep objects,
 without any parent-dependency conflicts. This can be guaranteed to work because SHEEPLE does not
 allow cyclic hierarchy lists."
+  ;; TODO - get this working. Things should load well at that point, and we can continue.
   ;; This sucks. And it doesn't work. Did I mention it sucks?
   (let ((sorted ())
         (base-sheeple (remove-if (lambda (spec)
                                    (cdr (assoc :parents spec)))
                                  specs)))
     (loop for sheep in base-sheeple
-       do (pushnew sheep sorted)
+       do (setf sorted (append sorted (list sheep)))
        (loop for other-sheep in specs
           do (loop for parent-spec in (cdr (assoc :parents other-sheep))
                 if (= (cdr (assoc :%persistent-sheep-pointer parent-spec))
                       (cdr (assoc :|_id| sheep)))
                 do (pushnew other-sheep base-sheeple))))
-    sorted))
+    (remove-duplicates sorted :test #'equal)))
 
 ;;;
 ;;; Persistent property access.
@@ -371,7 +373,9 @@ the object itself otherwise."
 (defun write-property-externally (sheep pname new-value)
   "We just put the altered document with the new property-value 
 straight into the database. CLOUCHDB:ENCODE takes care of all the nasty details."
-  (put-document
-   (set-document-property (get-document (db-id sheep))
-                          pname new-value)))
+  (let ((document (get-document (db-id sheep))))
+    (put-document
+     (set-document-property document
+                            :properties (append (list (cons pname new-value))
+                                                (cdr (assoc :properties document)))))))
 
