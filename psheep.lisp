@@ -254,9 +254,9 @@ as a key. The CDR of the pointer cons is the unique database ID of the sheep obj
 includes reader/writer definitions, it will define new readers/writes for the new sheep object."
   (with-db database
     (let ((alist (get-document doc-id)))
-      (alist->sheep alist doc-id))))
+      (alist->sheep alist))))
 
-(defun alist->sheep (alist doc-id)
+(defun alist->sheep (alist)
   "This function extracts all the necessary info from ALIST, and then calls SPAWN-SHEEP with the
 corresponding arguments. Doing (alist->sheep (sheep->alist *sheep*)) should generate two objects
 that are basically EQUAL (identical characteristics, not same object). This only applies, though,
@@ -265,13 +265,14 @@ if no messages have been defined on *sheep*, except for readers/writers provided
         (properties (cdr (assoc :properties alist)))
         (metaclass (find-class (read-from-string (cdr (assoc :metaclass alist)))))
         (nickname (cdr (assoc :nickname alist)))
-        (dox (cdr (assoc :documentation alist))))
+        (dox (cdr (assoc :documentation alist)))
+        (db-id (read-from-string (cdr (assoc :|_id| alist)))))
     (spawn-sheep parents
                  :metaclass metaclass
                  :properties (property-alist->property-definition properties)
                  :nickname nickname
                  :documentation dox
-                 :doc-id doc-id)))
+                 :doc-id db-id)))
 
 (defun property-alist->property-definition (alist)
   (mapcar #'format-property-definition-for-defsheep alist))
@@ -287,15 +288,17 @@ if no messages have been defined on *sheep*, except for readers/writers provided
                     `(:writers ,writers)))))
 
 (defun reload-sheeple-from-database (database)
-  ;; TODO: This is fine and dandy as a first step, but this needs to do a lot more
-  ;;       (such as being sorted as a precedence list)
+  "Called during LOAD-DB, this function reads all entries in DATABASE, and assumes they'll all be
+sheeple. It then takes the specs and reloads them into actual sheep objects. It also takes care
+of setting MAX-SHEEP-ID."
   (let ((sorted-spec (topologically-sort-sheep-specs (get-all-sheep-specs-from-db database))))
-    (loop for spec in sorted-spec
-       do (let ((db-id (read-from-string (cdr (assoc :|id| spec)))))
-            ;; TODO - this is where I need to do the goddamn sheep-id juggling. Fucking hell.
-            (loop until (= (1- db-id) (%max-sheep-id database))
-               do (incf (%max-sheep-id database)))
-            (document->sheep db-id database))))
+     (loop for spec in sorted-spec
+        do (let ((db-id (read-from-string (cdr (assoc :|id| spec)))))
+             (document->sheep db-id database)
+             ;; the only id-juggling we need to do now is make sure
+             ;; that by the end of it, max-sheep-id is properly set.
+             (when (> db-id (max-sheep-id))
+               (setf (max-sheep-id) db-id)))))
   *all-sheep*)
 
 (defun get-all-sheep-specs-from-db (database)
