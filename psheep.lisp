@@ -85,19 +85,14 @@ the object to *all-sheep* for easy access."
   (allocate-sheep-in-database sheep *sheep-db*)
   (pushnew sheep *all-sheep*))
 
-(defgeneric allocate-sheep-in-database (sheep database))
+(defgeneric allocate-sheep-in-database (sheep database db-id))
 (defmethod allocate-sheep-in-database ((sheep persistent-sheep) (db database))
   "This takes care of dumping a proper representation of SHEEP into DB, so we can reload it later."
   (with-db db
-    ;; KLUDGE - There's no entry point that I can figure out for making this assign a custom
-    ;; sheep-id. The only choice, then, when reloading, is to have a mess where max-sheep-id
-    ;; is manually juggled.
-    (assign-new-db-id sheep)
-    ;; KLUDGE - When we reload sheep from the database, it triggers INITIALIZE-INSTANCE, and 
-    ;; subsequently, this function. For that reason, we should simply not reallocate sheep objects
-    ;; that already exist. This isn't so much of a problem, because this is only called on creation.
+    (unless (db-id sheep)
+     (assign-new-db-id sheep))
     (unless (get-document (db-id sheep) :if-missing nil)
-      (let* ((sheep-alist (sheep->alist sheep)))
+      (let ((sheep-alist (sheep->alist sheep)))
         (put-document sheep-alist :id (db-id sheep))))))
 
 (defun assign-new-db-id (sheep)
