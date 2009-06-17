@@ -35,8 +35,8 @@
 (defun make-database (db-name &key (host "localhost") (port 5984))
   (let ((db (make-instance 'database :db db-name :host host 
                            :port (etypecase port
-                                   (number port)
-                                   (string (read-from-string port))))))
+                                   (number (format nil "~A" port))
+                                   (string port)))))
     (create-db :db-name (db-name db)
                :if-exists :ignore)
     db))
@@ -254,9 +254,9 @@ as a key. The CDR of the pointer cons is the unique database ID of the sheep obj
 includes reader/writer definitions, it will define new readers/writes for the new sheep object."
   (with-db database
     (let ((alist (get-document doc-id)))
-      (alist->sheep alist))))
+      (alist->sheep alist doc-id))))
 
-(defun alist->sheep (alist)
+(defun alist->sheep (alist doc-id)
   "This function extracts all the necessary info from ALIST, and then calls SPAWN-SHEEP with the
 corresponding arguments. Doing (alist->sheep (sheep->alist *sheep*)) should generate two objects
 that are basically EQUAL (identical characteristics, not same object). This only applies, though,
@@ -270,7 +270,8 @@ if no messages have been defined on *sheep*, except for readers/writers provided
                  :metaclass metaclass
                  :properties (property-alist->property-definition properties)
                  :nickname nickname
-                 :documentation dox)))
+                 :documentation dox
+                 :doc-id doc-id)))
 
 (defun property-alist->property-definition (alist)
   (mapcar #'format-property-definition-for-defsheep alist))
