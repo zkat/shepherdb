@@ -6,6 +6,7 @@
    :load-db
    ;; psheeple
    :*all-sheep*
+   :persistent-sheep
    :pclone
    :print-object
    :find-sheep-with-id
