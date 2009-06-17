@@ -79,10 +79,9 @@
   (:documentation "Persistent-sheep objects themselves are just like regular sheep, except they
 contain a DB-ID 'metavalue', which is used to uniquely identify the object in a database."))
 
-(defmethod initialize-instance :after ((sheep persistent-sheep) &key db-id)
+(defmethod initialize-instance :after ((sheep persistent-sheep) &key)
   "Every time a persistent-sheep object is created, we need to tell the database about it, and add
 the object to *all-sheep* for easy access."
-  (setf (db-id sheep) db-id)
   (allocate-sheep-in-database sheep *sheep-db*)
   (pushnew sheep *all-sheep*))
 
