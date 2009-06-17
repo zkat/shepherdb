@@ -49,7 +49,7 @@
 (defun load-db (name &key (hostname "localhost") (port "5984"))
   "This function does a ton of shit! :D"
   (let ((db (make-database name :host hostname :port port)))
-    (with-db db
+    #+leave-this-alone-for-now (with-db db
       (reload-sheeple-from-database db))
     (use-database db)
     (setf *sheep-db* db)
@@ -85,7 +85,7 @@ the object to *all-sheep* for easy access."
   (allocate-sheep-in-database sheep *sheep-db*)
   (pushnew sheep *all-sheep*))
 
-(defgeneric allocate-sheep-in-database (sheep database db-id))
+(defgeneric allocate-sheep-in-database (sheep database))
 (defmethod allocate-sheep-in-database ((sheep persistent-sheep) (db database))
   "This takes care of dumping a proper representation of SHEEP into DB, so we can reload it later."
   (with-db db
