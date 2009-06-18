@@ -39,15 +39,6 @@
 ;;              :nickname nickname
 ;;              :documentation documentation)
 ;;
-(defun load-db (name &key (hostname "localhost") (port "5984"))
-  "This function does a ton of shit! :D"
-  (let ((db (make-database name :host hostname :port port)))
-    (setf *sheep-db* db)
-    (with-db db
-      (reload-sheeple-from-database db))
-    (use-database db)
-    db))
-
 (defun document->sheep (doc-id database)
   "This function generates a new sheep object based on an ALIST definition. If the definition
 includes reader/writer definitions, it will define new readers/writes for the new sheep object."

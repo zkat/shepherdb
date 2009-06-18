@@ -60,3 +60,11 @@
                   :db-name (db-name database)
                   :port (port database)))
 
+(defun load-db (name &key (hostname "localhost") (port "5984"))
+  "This function does a ton of shit! :D"
+  (let ((db (make-database name :host hostname :port port)))
+    (setf *sheep-db* db)
+    (with-db db
+      (reload-sheeple-from-database db))
+    (use-database db)
+    db))
