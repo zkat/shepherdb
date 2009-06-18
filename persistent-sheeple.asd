@@ -7,6 +7,12 @@
   :depends-on (sheeple clouchdb)
   :serial t
   :components
-  ((:file "packages")
-   (:file "psheep")))
+  ((:module "src"
+            :serial t
+            :components
+            ((:file "packages")
+             (:file "db")
+             (:file "psheep")
+             (:file "encoding")
+             (:file "decoding")))))
 
