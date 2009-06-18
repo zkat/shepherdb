@@ -85,7 +85,7 @@ contain a DB-ID 'metavalue', which is used to uniquely identify the object in a 
   "Every time a persistent-sheep object is created, we need to tell the database about it, and add
 the object to *all-sheep* for easy access."
   (allocate-sheep-in-database sheep *sheep-db*)
-  (pushnew sheep *all-sheep*))
+  (setf *all-sheep* (append (list sheep) *all-sheep*)))
 
 (defgeneric allocate-sheep-in-database (sheep database))
 (defmethod allocate-sheep-in-database ((sheep persistent-sheep) (db database))
@@ -271,13 +271,13 @@ if no messages have been defined on *sheep*, except for readers/writers provided
         (metaclass (find-class (read-from-string (cdr (assoc :metaclass alist)))))
         (nickname (cdr (assoc :nickname alist)))
         (dox (cdr (assoc :documentation alist)))
-        (db-id (read-from-string (cdr (assoc :|_id| alist)))))
+        (db-id (get-id-from-spec alist)))
     (spawn-sheep parents
                  :metaclass metaclass
                  :properties (property-alist->property-definition properties)
                  :nickname nickname
                  :documentation dox
-                 :doc-id db-id)))
+                 :db-id db-id)))
 
 (defun property-alist->property-definition (alist)
   (mapcar #'format-property-definition-for-defsheep alist))
@@ -296,15 +296,12 @@ if no messages have been defined on *sheep*, except for readers/writers provided
   "Called during LOAD-DB, this function reads all entries in DATABASE, and assumes they'll all be
 sheeple. It then takes the specs and reloads them into actual sheep objects. It also takes care
 of setting MAX-SHEEP-ID."
-  (let ((sorted-spec (topologically-sort-sheep-specs
-                      (get-all-sheep-specs-from-db database))))
-    (loop for spec in sorted-spec
-       do (let ((db-id (read-from-string (cdr (assoc :|_id| spec)))))
-            (document->sheep db-id database)
-            ;; the only id-juggling we need to do now is make sure
-            ;; that by the end of it, max-sheep-id is properly set.
-            (when (> db-id (max-sheep-id))
-              (setf (max-sheep-id) db-id)))))
+  (let ((sorted-spec-ids (topologically-sort-sheep-specs
+                          (get-all-sheep-specs-from-db database))))
+    (loop for id in sorted-spec-ids
+       do (document->sheep id database)
+         (when (> id (max-sheep-id))
+           (setf (max-sheep-id) id))))
   *all-sheep*)
 
 (defun get-all-sheep-specs-from-db (database)
@@ -318,11 +315,12 @@ of setting MAX-SHEEP-ID."
 such that iterating over the list and calling alist->sheep on each item generates new sheep objects,
 without any parent-dependency conflicts. This can be guaranteed to work because SHEEPLE does not
 allow cyclic hierarchy lists."
-  (reverse (topological-sort specs
+  (reverse (topological-sort (mapcar #'get-id-from-spec specs)
                              (remove-duplicates
-                              (mapappend #'local-spec-precedence-ordering
-                                         specs))
-                             #'std-tie-breaker-rule)))
+                              (find-all-edges specs)))))
+
+(defun get-id-from-spec (spec)
+  (read-from-string (cdr (assoc :|_id| spec))))
 
 ;;;
 ;;; Persistent property access.
@@ -382,47 +380,41 @@ straight into the database. CLOUCHDB:ENCODE takes care of all the nasty details.
       (append (apply fun (mapcar #'car args))
               (apply #'mapappend fun (mapcar #'cdr args)))))
 
-(defun topological-sort (elements constraints tie-breaker)
-  (let ((remaining-constraints constraints)
-        (remaining-elements elements)
+(defun topological-sort (id-nums edges)
+  "This topologically sorts ELEMENTS according to the constraints provided. When
+things could go either way, TIE-BREAKER is used to pick which one we want."
+  ;; This is taken straight from sheeple, which took it directly from Closette.
+  ;; It also seems to infinitely loop. Whooooo
+  (let ((remaining-edges edges)
+        (remaining-nums id-nums)
         (result ())) 
     (loop
-       (let ((minimal-elements
+       (let ((minimal-nums
               (remove-if
-               (lambda (sheep)
-                 (member sheep remaining-constraints
-                         :key #'cadr :test #'equal))
-               remaining-elements)))
-         (when (null minimal-elements)
-           (if (null remaining-elements)
+               (lambda (id)
+                 (member id remaining-edges
+                         :key #'cadr))
+               remaining-nums)))
+         (when (null minimal-nums)
+           (if (null remaining-nums)
                (return-from topological-sort result)
                (error "Inconsistent precedence graph.")))
-         (let ((choice (if (null (cdr minimal-elements))
-                           (car minimal-elements)
-                           (funcall tie-breaker
-                                    minimal-elements
-                                    result))))
+         (let ((choice (car minimal-nums)))
            (setf result (append result (list choice)))
-           (setf remaining-elements
-                 (remove choice remaining-elements))
-           (setf remaining-constraints
+           (setf remaining-nums
+                 (remove choice remaining-nums))
+           (setf remaining-edges
                  (remove choice
-                         remaining-constraints
+                         remaining-edges
                          :test (lambda (x y) (member x y :test #'equal)))))))))
 
+(defun find-all-edges (specs)
+  (loop for spec in specs
+     collect (loop for edge in (edges-of-spec spec)
+             collect (list (read-from-string (cdr (assoc :|_id| spec)))
+                           edge))))
 
-
-(defun local-spec-precedence-ordering (spec)
-  (mapcar #'list
-          (cons spec
-                (butlast (mapcar #'get-sheep-from-db (cdr (assoc :parents spec)))))
-          (mapcar #'get-sheep-from-db (cdr (assoc :parents spec)))))
-
-(defun std-tie-breaker-rule (minimal-elements hl-so-far)
-  (dolist (hl-constituent (reverse hl-so-far))
-    (let* ((supers (mapcar #'get-sheep-from-db (cdr (assoc :parents hl-constituent))))
-           (common (intersection minimal-elements supers :test #'equal)))
-      (when (not (null common))
-        (return-from std-tie-breaker-rule (car common))))))
-
+(defun edges-of-spec (spec)
+  (loop for pointer in (cdr (assoc :parents spec))
+       collect (cdr (assoc :%persistent-sheep-pointer pointer))))
 
