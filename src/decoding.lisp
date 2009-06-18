@@ -47,7 +47,7 @@ includes reader/writer definitions, it will define new readers/writes for the ne
       (alist->sheep alist))))
 
 (defun get-sheep-from-db (pointer)
-  (get-document (cdr (assoc :%persistent-sheep-pointer pointer))))
+  (get-document (psheep-pointer-value pointer)))
 
 (defun alist->sheep (alist)
   "This function extracts all the necessary info from ALIST, and then calls SPAWN-SHEEP with the
@@ -55,7 +55,7 @@ corresponding arguments. Doing (alist->sheep (sheep->alist *sheep*)) should gene
 that are basically EQUAL (identical characteristics, not same object). This only applies, though,
 if no messages have been defined on *sheep*, except for readers/writers provided to spawn-sheep."
   (let ((parents (mapcar (lambda (pointer)
-                           (find-sheep-with-id (cdr (assoc :%persistent-sheep-pointer pointer))))
+                           (find-sheep-with-id (psheep-pointer-value pointer)))
                          (cdr (assoc :parents alist))))
         (properties (cdr (assoc :properties alist)))
         (metaclass (find-class (read-from-string (cdr (assoc :metaclass alist)))))
@@ -105,9 +105,9 @@ of setting MAX-SHEEP-ID."
 such that iterating over the list and calling alist->sheep on each item generates new sheep objects,
 without any parent-dependency conflicts. This can be guaranteed to work because SHEEPLE does not
 allow cyclic hierarchy lists."
-  (reverse (topological-sort (mapcar #'get-id-from-spec specs)
-                             (remove-duplicates
-                              (find-all-edges specs)))))
+  (topological-sort (mapcar #'get-id-from-spec specs)
+                    (remove-duplicates
+                     (find-all-edges specs))))
 
 (defun get-id-from-spec (spec)
   (read-from-string (cdr (assoc :|_id| spec))))

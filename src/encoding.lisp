@@ -53,7 +53,6 @@
 (defgeneric sheep->alist (sheep)
   (:documentation "Returns an alist representation of SHEEP. The alist contains everything
 Sheeple needs in order to reload an identical sheep object."))
-
 (defmethod sheep->alist ((sheep standard-sheep))
   "This serializes a standard-sheep object. It's used mostly for testing, since the only sheep
 that should actually be serialized are PERSISTENT-SHEEP objects."
@@ -113,16 +112,19 @@ as a key. The CDR of the pointer cons is the unique database ID of the sheep obj
 ;; The difference here is that db-pointer-p checks whether any arbitrary object is a pointer,
 ;; sheep-pointer-p checks that it's actually a sheep pointer (not just an alist), and 
 ;; valid-sheep-pointer-p checks that the pointer points to a sheep-id for an existing sheep object.
+(defun psheep-pointer-value (ptr)
+  (cdr (assoc :%persistent-sheep-pointer ptr)))
+
 (defun db-pointer-p (entry)
   (if (and (listp entry) (assoc :%persistent-sheep-pointer entry))
       t nil))
 
 (defun sheep-pointer-p (entry)
-  (let ((got-it? (assoc :%persistent-sheep-pointer entry)))
+  (let ((got-it? (psheep-pointer-value entry)))
     (if got-it? t nil)))
 
 (defun valid-sheep-pointer-p (entry)
-  (let ((sheep-id (cdr (assoc :%persistent-sheep-pointer entry))))
+  (let ((sheep-id (psheep-pointer-value entry)))
     (if (and (numberp sheep-id)
              (get-document sheep-id :if-missing nil))
         t nil)))
