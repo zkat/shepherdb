@@ -33,6 +33,20 @@
    (db-name :accessor db-name :initarg :db)
    (max-sheep-id :accessor %max-sheep-id :initform 0)))
 
+;;; Convenience
+;; this sets the current database. It says which datab....... FFFFFFFFFFFUUUUUUUUCK!!!11one
+(defmacro with-db (database &body body)
+  `(with-connection (:db-name (db-name ,database) :host (host ,database) :port (port ,database))
+     ,@body))
+
+;; Because we -totally- know which database is the relevant one, this just grabs whatever is
+;; in *sheep-db* DURR HURR
+(defun max-sheep-id ()
+  (%max-sheep-id *sheep-db*))
+(defun (setf max-sheep-id) (new-value)
+  (setf (%max-sheep-id *sheep-db*) new-value))
+
+;;; Juicy Parts
 (defun make-database (db-name &key (host "localhost") (port 5984))
   (let ((db (make-instance 'database :db db-name :host host 
                            :port (etypecase port
@@ -50,24 +64,11 @@
 (defun load-db (name &key (hostname "localhost") (port "5984"))
   "This function does a ton of shit! :D"
   (let ((db (make-database name :host hostname :port port)))
-    #+leave-this-alone-for-now (with-db db
+    (setf *sheep-db* db)
+    (with-db db
       (reload-sheeple-from-database db))
     (use-database db)
-    (setf *sheep-db* db)
     db))
-
-;;; Convenience
-;; this sets the current database. It says which datab....... FFFFFFFFFFFUUUUUUUUCK!!!11one
-(defmacro with-db (database &body body)
-  `(with-connection (:db-name (db-name ,database) :host (host ,database) :port (port ,database))
-     ,@body))
-
-;; Because we -totally- know which database is the relevant one, this just grabs whatever is
-;; in *sheep-db* DURR HURR
-(defun max-sheep-id ()
-  (%max-sheep-id *sheep-db*))
-(defun (setf max-sheep-id) (new-value)
-  (setf (%max-sheep-id *sheep-db*) new-value))
 
 ;;;
 ;;; Persistent-Sheeple
@@ -194,8 +195,7 @@ for the database to store."
      ;; Because only persistent-sheeple can be turned to JSON, we can't involve standard-sheep
      ;; objects in this. Thus, we get rid of =dolly=, since we can assume she'll be added
      ;; upon sheep re-creation.
-     (cons :parents (if (eql parents (list =dolly=))
-                        nil parents))
+     (cons :parents (remove =dolly= parents))
      (cons :properties properties)
      (cons :metaclass metaclass)
      (cons :nickname nickname)
@@ -256,12 +256,17 @@ includes reader/writer definitions, it will define new readers/writes for the ne
     (let ((alist (get-document doc-id)))
       (alist->sheep alist))))
 
+(defun get-sheep-from-db (pointer)
+  (get-document (cdr (assoc :%persistent-sheep-pointer pointer))))
+
 (defun alist->sheep (alist)
   "This function extracts all the necessary info from ALIST, and then calls SPAWN-SHEEP with the
 corresponding arguments. Doing (alist->sheep (sheep->alist *sheep*)) should generate two objects
 that are basically EQUAL (identical characteristics, not same object). This only applies, though,
 if no messages have been defined on *sheep*, except for readers/writers provided to spawn-sheep."
-  (let ((parents (cdr (assoc :parents alist)))
+  (let ((parents (mapcar (lambda (pointer)
+                           (find-sheep-with-id (cdr (assoc :%persistent-sheep-pointer pointer))))
+                         (cdr (assoc :parents alist))))
         (properties (cdr (assoc :properties alist)))
         (metaclass (find-class (read-from-string (cdr (assoc :metaclass alist)))))
         (nickname (cdr (assoc :nickname alist)))
@@ -293,13 +298,13 @@ sheeple. It then takes the specs and reloads them into actual sheep objects. It 
 of setting MAX-SHEEP-ID."
   (let ((sorted-spec (topologically-sort-sheep-specs
                       (get-all-sheep-specs-from-db database))))
-     (loop for spec in sorted-spec
-        do (let ((db-id (read-from-string (cdr (assoc :|id| spec)))))
-             (document->sheep db-id database)
-             ;; the only id-juggling we need to do now is make sure
-             ;; that by the end of it, max-sheep-id is properly set.
-             (when (> db-id (max-sheep-id))
-               (setf (max-sheep-id) db-id)))))
+    (loop for spec in sorted-spec
+       do (let ((db-id (read-from-string (cdr (assoc :|_id| spec)))))
+            (document->sheep db-id database)
+            ;; the only id-juggling we need to do now is make sure
+            ;; that by the end of it, max-sheep-id is properly set.
+            (when (> db-id (max-sheep-id))
+              (setf (max-sheep-id) db-id)))))
   *all-sheep*)
 
 (defun get-all-sheep-specs-from-db (database)
@@ -313,20 +318,11 @@ of setting MAX-SHEEP-ID."
 such that iterating over the list and calling alist->sheep on each item generates new sheep objects,
 without any parent-dependency conflicts. This can be guaranteed to work because SHEEPLE does not
 allow cyclic hierarchy lists."
-  ;; TODO - get this working. Things should load well at that point, and we can continue.
-  ;; This sucks. And it doesn't work. Did I mention it sucks?
-  (let ((sorted ())
-        (base-sheeple (remove-if (lambda (spec)
-                                   (cdr (assoc :parents spec)))
-                                 specs)))
-    (loop for sheep in base-sheeple
-       do (setf sorted (append sorted (list sheep)))
-       (loop for other-sheep in specs
-          do (loop for parent-spec in (cdr (assoc :parents other-sheep))
-                if (= (cdr (assoc :%persistent-sheep-pointer parent-spec))
-                      (cdr (assoc :|_id| sheep)))
-                do (pushnew other-sheep base-sheeple))))
-    (remove-duplicates sorted :test #'equal)))
+  (reverse (topological-sort specs
+                             (remove-duplicates
+                              (mapappend #'local-spec-precedence-ordering
+                                         specs))
+                             #'std-tie-breaker-rule)))
 
 ;;;
 ;;; Persistent property access.
@@ -378,4 +374,55 @@ straight into the database. CLOUCHDB:ENCODE takes care of all the nasty details.
      (set-document-property document
                             :properties (append (list (cons pname new-value))
                                                 (cdr (assoc :properties document)))))))
+
+;;; utils
+(defun mapappend (fun &rest args)
+  (if (some #'null args)
+      ()
+      (append (apply fun (mapcar #'car args))
+              (apply #'mapappend fun (mapcar #'cdr args)))))
+
+(defun topological-sort (elements constraints tie-breaker)
+  (let ((remaining-constraints constraints)
+        (remaining-elements elements)
+        (result ())) 
+    (loop
+       (let ((minimal-elements
+              (remove-if
+               (lambda (sheep)
+                 (member sheep remaining-constraints
+                         :key #'cadr :test #'equal))
+               remaining-elements)))
+         (when (null minimal-elements)
+           (if (null remaining-elements)
+               (return-from topological-sort result)
+               (error "Inconsistent precedence graph.")))
+         (let ((choice (if (null (cdr minimal-elements))
+                           (car minimal-elements)
+                           (funcall tie-breaker
+                                    minimal-elements
+                                    result))))
+           (setf result (append result (list choice)))
+           (setf remaining-elements
+                 (remove choice remaining-elements))
+           (setf remaining-constraints
+                 (remove choice
+                         remaining-constraints
+                         :test (lambda (x y) (member x y :test #'equal)))))))))
+
+
+
+(defun local-spec-precedence-ordering (spec)
+  (mapcar #'list
+          (cons spec
+                (butlast (mapcar #'get-sheep-from-db (cdr (assoc :parents spec)))))
+          (mapcar #'get-sheep-from-db (cdr (assoc :parents spec)))))
+
+(defun std-tie-breaker-rule (minimal-elements hl-so-far)
+  (dolist (hl-constituent (reverse hl-so-far))
+    (let* ((supers (mapcar #'get-sheep-from-db (cdr (assoc :parents hl-constituent))))
+           (common (intersection minimal-elements supers :test #'equal)))
+      (when (not (null common))
+        (return-from std-tie-breaker-rule (car common))))))
+
 
