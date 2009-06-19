@@ -105,9 +105,9 @@ of setting MAX-SHEEP-ID."
 such that iterating over the list and calling alist->sheep on each item generates new sheep objects,
 without any parent-dependency conflicts. This can be guaranteed to work because SHEEPLE does not
 allow cyclic hierarchy lists."
-  (topological-sort (mapcar #'get-id-from-spec specs)
-                    (remove-duplicates
-                     (find-all-edges specs))))
+  (reverse (topological-sort (mapcar #'get-id-from-spec specs)
+                             (remove-duplicates
+                              (find-all-edges specs)))))
 
 (defun get-id-from-spec (spec)
   (read-from-string (cdr (assoc :|_id| spec))))
@@ -138,11 +138,11 @@ things could go either way, TIE-BREAKER is used to pick which one we want."
            (setf remaining-edges
                  (remove choice
                          remaining-edges
-                         :test (lambda (x y) (member x y :test #'equal)))))))))
+                         :test #'member)))))))
 
 (defun find-all-edges (specs)
   (loop for spec in specs
-     collect (loop for edge in (edges-of-spec spec)
+     appending (loop for edge in (edges-of-spec spec)
                 collect (list (get-id-from-spec spec)
                               edge))))
 
