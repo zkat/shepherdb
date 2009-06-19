@@ -129,3 +129,58 @@ as a key. The CDR of the pointer cons is the unique database ID of the sheep obj
              (get-document sheep-id :if-missing nil))
         t nil)))
 
+;;;
+;;; Properties
+;;;
+(defun read-property-externally (sheep pname)
+  "Get the property directly from the sheep document, using the SHEEP's ID. If it's there,
+return the value, and T. If not, return NIL NIL."
+  (multiple-value-bind (properties hasp)
+      (document-property :properties (get-document (db-id sheep)))
+    (if hasp
+        (let* ((prop-spec (find-if (lambda (p)
+                                     (eq pname (read-from-string (cdr (assoc :name p)))))
+                                   properties)))
+          (if prop-spec 
+              (let ((value (cdr (assoc :value prop-spec))))
+                (values (db-entry->lisp-object value) t))
+              (values nil nil)))
+        (values nil nil))))
+
+(defun db-pointer->sheep (pointer)
+  "This is used whenever we try to fetch a property-value represented as a sheep pointer.
+It doesn't actually do any loading/reloading of sheep -- instead, it just finds the appropriate
+object in *all-sheep*"
+  (let ((db-id (cdr (assoc :%persistent-sheep-pointer pointer))))
+    (find-sheep-with-id db-id)))
+
+(defun db-entry->lisp-object (entry)
+  "This takes care of turning ENTRY into an actual sheep object, if it's a pointer, or
+the object itself otherwise."
+  (if (db-pointer-p entry)
+      (db-pointer->sheep entry)
+      entry)) 
+
+(defun write-property-externally (sheep pname new-value)
+  "We just put the altered document with the new property-value 
+straight into the database. CLOUCHDB:ENCODE takes care of all the nasty details."
+  (let ((document (get-document (db-id sheep))))
+    (put-document
+     (set-document-property document
+                            :properties (assign-property-value
+                                         (document-property :properties 
+                                                            document) pname new-value)))))
+
+(defun assign-property-value (spec pname value)
+  (let* ((property-spec (find-if (lambda (property)
+                                   (eq pname (cdr (assoc :name property))))
+                                 spec))
+         (other-specs (remove property-spec spec :test #'equalp)))
+    (append other-specs (list (if property-spec 
+                                  (set-document-property property-spec
+                                                         :value value)
+                                  (list (cons :name pname)
+                                        (cons :value value)
+                                        (cons :readers nil)
+                                        (cons :writers nil)))))))
+

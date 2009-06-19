@@ -76,7 +76,7 @@ if no messages have been defined on *sheep*, except for readers/writers provided
         (value (cdr (assoc :value def)))
         (readers (cdr (assoc :readers def)))
         (writers (cdr (assoc :writers def))))
-    `(:name ,name :value ,value
+    `(:name ,(read-from-string name) :value ,value
             ,@(when readers
                     `(:readers ,readers))
             ,@(when writers

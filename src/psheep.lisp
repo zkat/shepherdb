@@ -84,39 +84,6 @@ the object to *all-sheep* for easy access."
   (write-property-externally sheep property-name new-value)
   new-value)
 
-(defun read-property-externally (sheep pname)
-  "Get the property directly from the sheep document, using the SHEEP's ID. If it's there,
-return the value, and T. If not, return NIL NIL."
-  (multiple-value-bind (value hasp)
-      (document-property pname (get-document (db-id sheep)))
-    (if hasp
-        ;; We have to make sure we don't return our clever little pointers.
-        (values (db-entry->lisp-object value) t)
-        (values nil nil))))
-
-(defun db-pointer->sheep (pointer)
-  "This is used whenever we try to fetch a property-value represented as a sheep pointer.
-It doesn't actually do any loading/reloading of sheep -- instead, it just finds the appropriate
-object in *all-sheep*"
-  (let ((db-id (cdr (assoc :%persistent-sheep-pointer pointer))))
-    (find-sheep-with-id db-id)))
-
-(defun db-entry->lisp-object (entry)
-  "This takes care of turning ENTRY into an actual sheep object, if it's a pointer, or
-the object itself otherwise."
-  (if (db-pointer-p entry)
-      (db-pointer->sheep entry)
-      entry)) 
-
-(defun write-property-externally (sheep pname new-value)
-  "We just put the altered document with the new property-value 
-straight into the database. CLOUCHDB:ENCODE takes care of all the nasty details."
-  (let ((document (get-document (db-id sheep))))
-    (put-document
-     (set-document-property document
-                            :properties (append (list (cons pname new-value))
-                                                (cdr (assoc :properties document)))))))
-
 (defmethod (setf sheeple:sheep-nickname) :after (new-nickname (sheep persistent-sheep))
   (let ((document (get-document (db-id sheep))))
     (put-document 
