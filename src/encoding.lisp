@@ -128,3 +128,4 @@ as a key. The CDR of the pointer cons is the unique database ID of the sheep obj
     (if (and (numberp sheep-id)
              (get-document sheep-id :if-missing nil))
         t nil)))
+

@@ -32,8 +32,10 @@ contain a DB-ID 'metavalue', which is used to uniquely identify the object in a 
 (defmethod initialize-instance :after ((sheep persistent-sheep) &key)
   "Every time a persistent-sheep object is created, we need to tell the database about it, and add
 the object to *all-sheep* for easy access."
-  (allocate-sheep-in-database sheep *sheep-db*)
   (setf *all-sheep* (append (list sheep) *all-sheep*)))
+
+(defmethod finalize-sheep :after ((sheep persistent-sheep))
+  (allocate-sheep-in-database sheep *sheep-db*))
 
 (defgeneric allocate-sheep-in-database (sheep database))
 (defmethod allocate-sheep-in-database ((sheep persistent-sheep) (db database))
@@ -115,3 +117,11 @@ straight into the database. CLOUCHDB:ENCODE takes care of all the nasty details.
                             :properties (append (list (cons pname new-value))
                                                 (cdr (assoc :properties document)))))))
 
+(defmethod (setf sheeple:sheep-nickname) :after (new-nickname (sheep persistent-sheep))
+  (let ((document (get-document (db-id sheep))))
+    (put-document 
+     (set-document-property document :nickname new-nickname))))
+(defmethod (setf sheeple:sheep-documentation) :after (new-dox (sheep persistent-sheep))
+  (let ((document (get-document (db-id sheep))))
+    (put-document
+     (set-document-property document :documentation new-dox))))
