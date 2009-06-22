@@ -21,7 +21,7 @@
 ;;;
 ;;; Persistent-Sheeple
 ;;;
-(defvar *all-sheep* nil
+(defvar *all-sheep* (make-hash-table)
   "all the sheep objects that are currently loaded.")
 
 (defclass persistent-sheep (standard-sheep)
@@ -32,7 +32,7 @@ contain a DB-ID 'metavalue', which is used to uniquely identify the object in a 
 (defmethod initialize-instance :after ((sheep persistent-sheep) &key)
   "Every time a persistent-sheep object is created, we need to tell the database about it, and add
 the object to *all-sheep* for easy access."
-  (setf *all-sheep* (append (list sheep) *all-sheep*)))
+  (setf (gethash (db-id sheep) *all-sheep*) sheep))
 
 (defmethod finalize-sheep :after ((sheep persistent-sheep))
   (allocate-sheep-in-database sheep *sheep-db*))
@@ -62,9 +62,7 @@ the object to *all-sheep* for easy access."
 
 (defun find-sheep-with-id (db-id)
   "Poor man's basic query function. ;)"
-  (find-if (lambda (sheep)
-             (= db-id (db-id sheep)))
-           *all-sheep*))
+  (gethash db-id *all-sheep*))
 
 ;;;
 ;;; Persistent property access.
