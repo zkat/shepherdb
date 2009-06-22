@@ -1,0 +1,36 @@
+* TODO Basics
+** DONE Load an empty database.
+** DONE Write an alist to the database.
+** DONE Serialize a sheep object into an alist
+** DONE Rebuild an identical sheep object using that alist
+** DONE Write a persistent-sheep metaclass
+   This metaclass should automatically be persisted, in alist form, to a database.
+** DONE Write property-access methods for direct-property-value and (setf property-value)
+   These methods should fetch the specified property from the database entry, instead of from
+   the sheep object itself. (setf property-value) should write the new value out to the database.
+** DONE regular encoding of sheep-objects should be in pointer form
+   References to other sheep objects within a sheep entry should point to a db-id of an actual sheep
+   object. These references should be deserialized by first finding whatever the pointer actually
+   points to, and grabbing that.
+** TODO Reliably reload a database
+   Whenever a database is loaded, all sheep objects represented in it should be recreated.
+*** DONE Sheep objects should be topologically-sorted according to mutual dependencies
+*** TODO Deal with database switching
+    If a different database is opened, *all-sheep* should be rebound and replaced
+    with the new database
+**** How do I deal with remaining references to persistent-sheep instances?
+*** TODO Support skipping of broken entries
+    I don't want -one- broken entry to ruin the entire database.
+* TODO Other important features
+** TODO Implement transient properties
+   Some things are better left unserialized
+** TODO Prevent unserialisable values from getting put into properties
+** TODO Allow versioning/rollbacks of individual objects
+** TODO Check reliability of sheep-dumping
+   Checking validity of newly-created sheep before dumping them into the database would help
+   with reloading them later, and it would give more useful feedback to users about what went
+   wrong, before it's too late.
+** TODO Allow serialization/deserialization of hash tables that doesn't reload them as alists
+* TODO Beyond simple usability
+** TODO Stress test this motherfucker
+** TODO Optimize the shit out of this motherfucker
