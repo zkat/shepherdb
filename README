@@ -1,2 +1,14 @@
 Currently under development -- persistent-sheeple allows you to create sheeple objects that are
 automatically persisted to a couchdb database.
+
+Example of work so far:
+
+PSHEEP> (load-db "test")
+#<DATABASE #x153227BE>
+PSHEEP> (pclone () ((var "value")))
+#<Persistent Sheep ID: 1 #x15330386>
+PSHEEP> (find-sheep-with-id 1)
+#<Persistent Sheep ID: 1 #x15330386>
+
+Since it's backed by couchdb, there is no shutdown procedure -- the database is either loaded,
+or it's not -- and psheep objects are reloaded in their last state when load-db is called.
