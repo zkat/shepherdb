@@ -32,10 +32,8 @@ contain a DB-ID 'metavalue', which is used to uniquely identify the object in a 
 (defmethod initialize-instance :after ((sheep persistent-sheep) &key)
   "Every time a persistent-sheep object is created, we need to tell the database about it, and add
 the object to *all-sheep* for easy access."
+  (allocate-sheep-in-database sheep *sheep-db*)
   (setf (gethash (db-id sheep) *all-sheep*) sheep))
-
-(defmethod finalize-sheep :after ((sheep persistent-sheep))
-  (allocate-sheep-in-database sheep *sheep-db*))
 
 (defgeneric allocate-sheep-in-database (sheep database))
 (defmethod allocate-sheep-in-database ((sheep persistent-sheep) (db database))
@@ -62,7 +60,7 @@ the object to *all-sheep* for easy access."
 
 (defun find-sheep-with-id (db-id)
   "Poor man's basic query function. ;)"
-  (gethash db-id *all-sheep*))
+  (values (gethash db-id *all-sheep*)))
 
 ;;;
 ;;; Persistent property access.
