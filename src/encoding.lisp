@@ -171,12 +171,11 @@ straight into the database. CLOUCHDB:ENCODE takes care of all the nasty details.
      (set-document-property document :property-values
                             (let ((value-alist (document-property :property-values document)))
                               (if value-alist
-                                  (progn
-                                    (let ((value-cons (assoc (as-keyword-symbol pname) value-alist)))
-                                      (if value-cons
-                                          (rplacd value-cons new-value)
-                                          (push (cons (as-keyword-symbol pname) new-value) 
-                                                value-alist)))
+                                  (let ((value-cons (assoc (as-keyword-symbol pname) value-alist)))
+                                    (if value-cons
+                                        (rplacd value-cons new-value)
+                                        (push (cons (as-keyword-symbol pname) new-value) 
+                                              value-alist))
                                     value-alist)
                                   (list (cons pname new-value))))))))
 
