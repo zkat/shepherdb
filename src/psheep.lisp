@@ -61,6 +61,8 @@ the object to *all-sheep* for easy access."
 (defun find-sheep-with-id (db-id)
   "Poor man's basic query function. ;)"
   (values (gethash db-id *all-sheep*)))
+(defun find-sheep (db-id)
+  (values (gethash db-id *all-sheep*)))
 
 ;;;
 ;;; Persistent property access.
@@ -78,6 +80,7 @@ the object to *all-sheep* for easy access."
 (defmethod (setf property-value) (new-value (sheep persistent-sheep) property-name)
   "Here, we just write stuff out to the database and forget about handing it to the sheep object."
   (write-property-externally sheep property-name new-value)
+  (call-next-method nil sheep property-name)
   new-value)
 
 (defmethod (setf sheeple:sheep-nickname) :after (new-nickname (sheep persistent-sheep))

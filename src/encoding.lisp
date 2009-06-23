@@ -49,7 +49,6 @@
 ;;
 ;; 4. Nickname/documentation
 ;;    These are both just strings, and we can dump them into the database as-is.
-
 (defgeneric sheep->alist (sheep)
   (:documentation "Returns an alist representation of SHEEP. The alist contains everything
 Sheeple needs in order to reload an identical sheep object."))
@@ -57,17 +56,20 @@ Sheeple needs in order to reload an identical sheep object."))
   "This serializes a standard-sheep object. It's used mostly for testing, since the only sheep
 that should actually be serialized are PERSISTENT-SHEEP objects."
   (let ((parents (sheep-direct-parents sheep))
-        (properties (loop for property in (sheep-direct-properties sheep)
-                       collect (list (cons :name (property-spec-name property))
-                                     (cons :value (property-spec-value property))
-                                     (cons :readers (property-spec-readers property))
-                                     (cons :writers (property-spec-writers property)))))
+        (property-values (loop for property in (sheep-direct-properties sheep)
+                            collect (cons (property-spec-name property)
+                                          (property-spec-value property))))
+        (property-specs (loop for property in (sheep-direct-properties sheep)
+                             collect (list (cons :name (property-spec-name property))
+                                           (cons :readers (property-spec-readers property))
+                                           (cons :writers (property-spec-writers property)))))
         (metaclass (class-name (class-of sheep)))
         (nickname (sheep-nickname sheep))
         (documentation (sheep-documentation sheep)))
     (list
      (cons :parents parents)
-     (cons :properties properties)
+     (cons :property-values property-values)
+     (cons :property-specs property-specs)
      (cons :metaclass metaclass)
      (cons :nickname nickname)
      (cons :documentation documentation))))
@@ -77,11 +79,13 @@ that should actually be serialized are PERSISTENT-SHEEP objects."
 for the database to store."
   (let ((parents (sheep-direct-parents sheep))
         ;; build an alist of alists by scanning the property-spec objects
-        (properties (loop for property in (sheep-direct-properties sheep)
-                       collect (list (cons :name (property-spec-name property))
-                                     (cons :value (property-spec-value property))
-                                     (cons :readers (property-spec-readers property))
-                                     (cons :writers (property-spec-writers property)))))
+        (property-values (loop for property in (sheep-direct-properties sheep)
+                            collect (cons (property-spec-name property)
+                                          (property-spec-value property))))
+        (property-specs (loop for property in (sheep-direct-properties sheep)
+                           collect (list (cons :name (property-spec-name property))
+                                         (cons :readers (property-spec-readers property))
+                                         (cons :writers (property-spec-writers property)))))
         ;; for the class, we just store the symbol
         (metaclass (class-name (class-of sheep)))
         ;; Nickname can either be a string or a symbol, documentation can be a string.
@@ -93,7 +97,8 @@ for the database to store."
      ;; objects in this. Thus, we get rid of =dolly=, since we can assume she'll be added
      ;; upon sheep re-creation.
      (cons :parents (remove =dolly= parents))
-     (cons :properties properties)
+     (cons :property-values property-values)
+     (cons :property-specs property-specs)
      (cons :metaclass metaclass)
      (cons :nickname nickname)
      (cons :documentation documentation))))
@@ -135,15 +140,12 @@ as a key. The CDR of the pointer cons is the unique database ID of the sheep obj
 (defun read-property-externally (sheep pname)
   "Get the property directly from the sheep document, using the SHEEP's ID. If it's there,
 return the value, and T. If not, return NIL NIL."
-  (multiple-value-bind (properties hasp)
-      (document-property :properties (get-document (db-id sheep)))
+  (multiple-value-bind (pvalues hasp)
+      (document-property :property-values (get-document (db-id sheep)))
     (if hasp
-        (let* ((prop-spec (find-if (lambda (p)
-                                     (eq pname (read-from-string (cdr (assoc :name p)))))
-                                   properties)))
-          (if prop-spec 
-              (let ((value (cdr (assoc :value prop-spec))))
-                (values (db-entry->lisp-object value) t))
+        (let ((value (cdr (assoc (as-keyword-symbol pname) pvalues))))
+          (if value
+              (values (db-entry->lisp-object value) t)
               (values nil nil)))
         (values nil nil))))
 
@@ -166,21 +168,21 @@ the object itself otherwise."
 straight into the database. CLOUCHDB:ENCODE takes care of all the nasty details."
   (let ((document (get-document (db-id sheep))))
     (put-document
-     (set-document-property document
-                            :properties (assign-property-value
-                                         (document-property :properties 
-                                                            document) pname new-value)))))
+     (set-document-property document :property-values
+                            (let ((value-alist (document-property :property-values document)))
+                              (if value-alist
+                                  (progn
+                                    (let ((value-cons (assoc (as-keyword-symbol pname) value-alist)))
+                                      (if value-cons
+                                          (rplacd value-cons new-value)
+                                          (push (cons (as-keyword-symbol pname) new-value) 
+                                                value-alist)))
+                                    value-alist)
+                                  (list (cons pname new-value))))))))
 
-(defun assign-property-value (spec pname value)
-  (let* ((property-spec (find-if (lambda (property)
-                                   (eq pname (cdr (assoc :name property))))
-                                 spec))
-         (other-specs (remove property-spec spec :test #'equalp)))
-    (append other-specs (list (if property-spec 
-                                  (set-document-property property-spec
-                                                         :value value)
-                                  (list (cons :name pname)
-                                        (cons :value value)
-                                        (cons :readers nil)
-                                        (cons :writers nil)))))))
+
+
+
+
+
 
