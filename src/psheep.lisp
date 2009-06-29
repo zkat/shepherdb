@@ -25,7 +25,8 @@
   "all the sheep objects that are currently loaded.")
 
 (defclass persistent-sheep (standard-sheep)
-  ((db-id :accessor db-id :initarg :db-id :initform nil))
+  ((db-id :accessor db-id :initarg :db-id :initform nil)
+   (deletedp :accessor deletedp :initform nil))
   (:documentation "Persistent-sheep objects themselves are just like regular sheep, except they
 contain a DB-ID 'metavalue', which is used to uniquely identify the object in a database."))
 
@@ -51,19 +52,27 @@ the object to *all-sheep* for easy access."
           (incf (max-sheep-id)))))
 
 ;;; Convenience
-(defmacro pclone (sheeple properties &rest options)
-  `(clone ,sheeple ,properties ,@options (:metaclass 'persistent-sheep)))
+(defun pclone (&rest sheeple)
+  (spawn-sheep sheeple :metaclass 'persistent-sheep))
 
 (defmethod print-object ((sheep persistent-sheep) stream)
   (print-unreadable-object (sheep stream :identity t)
     (format stream "Persistent Sheep ID: ~A~@[ AKA: ~A~]" (db-id sheep) (sheep-nickname sheep))))
 
-(defun find-sheep-with-id (db-id)
-  "Poor man's basic query function. ;)"
-  (values (gethash db-id *all-sheep*)))
 (defun find-sheep (db-id)
   (values (gethash db-id *all-sheep*)))
 
+;;;
+;;; add/remove parent
+;;;
+(defmethod add-parent :around (new-parent (sheep persistent-sheep))
+  (error "NEW-PARENT must be a persistent sheep."))
+(defmethod add-parent :around ((new-parent persistent-sheep) (sheep persistent-sheep))
+  (call-next-method)
+  (add-parent-externally new-parent sheep))
+
+(defmethod remove-parent :after (parent (sheep persistent-sheep))
+  (remove-parent-externally parent sheep))
 ;;;
 ;;; Persistent property access.
 ;;;
@@ -73,6 +82,20 @@ the object to *all-sheep* for easy access."
 ;; Fortunately, the bulk of what we have to do is just make sure that when a direct-property
 ;; is accessed, it's read/written out to the database, not to the sheep object itself.
 ;;
+(defmethod add-property ((sheep persistent-sheep) property-name value 
+                         &key readers writers (make-accessors-p t))
+  (call-next-method sheep property-name nil :readers readers
+                    :writers writers :make-accessors-p make-accessors-p)
+  (write-property-externally sheep property-name value)
+  (when readers
+    (add-readers-externally readers property-name sheep))
+  (when writers
+    (add-writers-externally writers property-name sheep))
+  (when make-accessors-p
+    (add-readers-externally `(,property-name) property-name sheep)
+    (add-writers-externally `((setf ,property-name)) property-name sheep))
+  sheep)
+
 (defmethod direct-property-value ((sheep persistent-sheep) property-name)
   "We redirect this method over to our function to read stuff externally."
   (read-property-externally sheep property-name))

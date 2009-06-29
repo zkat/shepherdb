@@ -2,13 +2,15 @@
 ** DONE Load an empty database.
 ** DONE Write an alist to the database.
 ** DONE Serialize a sheep object into an alist
-** DONE Rebuild an identical sheep object using that alist
+** TODO Rebuild an identical sheep object using that alist
+   This broke after serialization was updated.
 ** DONE Write a persistent-sheep metaclass
    This metaclass should automatically be persisted, in alist form, to a database.
-** TODO Write property-access methods for direct-property-value and (setf property-value)
+** DONE Write property-access methods for direct-property-value and (setf property-value)
    These methods should fetch the specified property from the database entry, instead of from
    the sheep object itself. (setf property-value) should write the new value out to the database.
    UPDATE: writing doesn't work.
+   UPDATE: It does now. I think.
 ** DONE regular encoding of sheep-objects should be in pointer form
    References to other sheep objects within a sheep entry should point to a db-id of an actual sheep
    object. These references should be deserialized by first finding whatever the pointer actually
@@ -35,6 +37,9 @@
 ** TODO Redo sheep property serialization
    Isolate property values and property descriptions into different document properties.
    This'll make accessing the properties easier and faster.
+** TODO Sheep deletion
+   There's a lot of questions to answer about this first -- what happens to all its children, 
+   for example.
 * TODO Beyond simple usability
 ** TODO Stress test this motherfucker
 ** TODO Optimize the shit out of this motherfucker

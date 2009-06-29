@@ -57,30 +57,29 @@ if no messages have been defined on *sheep*, except for readers/writers provided
   (let ((parents (mapcar (lambda (pointer)
                            (find-sheep-with-id (psheep-pointer-value pointer)))
                          (cdr (assoc :parents alist))))
-        (properties (cdr (assoc :properties alist)))
+        (property-values (cdr (assoc :property-values alist)))
+        (property-specs (cdr (assoc :property-specs alist)))
         (metaclass (find-class (read-from-string (cdr (assoc :metaclass alist)))))
         (nickname (cdr (assoc :nickname alist)))
         (dox (cdr (assoc :documentation alist)))
         (db-id (get-id-from-spec alist)))
     (spawn-sheep parents
                  :metaclass metaclass
-                 :properties (property-alist->property-definition properties)
+                 :properties (property-alist->property-definition property-values property-specs)
                  :nickname nickname
                  :documentation dox
                  :db-id db-id)))
 
-(defun property-alist->property-definition (alist)
-  (mapcar #'format-property-definition-for-defsheep alist))
-(defun format-property-definition-for-defsheep (def)
-  (let ((name (cdr (assoc :name def)))
-        (value (cdr (assoc :value def)))
-        (readers (cdr (assoc :readers def)))
-        (writers (cdr (assoc :writers def))))
-    `(:name ,(read-from-string name) :value ,value
-            ,@(when readers
-                    `(:readers ,readers))
-            ,@(when writers
-                    `(:writers ,writers)))))
+(defun property-alist->property-definition (values specs)
+  (loop for spec in specs
+     collect (let* ((pname (cdr (assoc :name spec)))
+                    (readers (cdr (assoc :readers spec)))
+                    (writers (cdr (assoc :writers spec)))
+                    (value (cdr (assoc pname values))))
+               `(:name ,(read-from-string pname) :value ,value
+                       ,@(when readers
+                               `(:readers ,readers))
+                       ,@(when writers)))))
 
 (defun reload-sheeple-from-database (database)
   "Called during LOAD-DB, this function reads all entries in DATABASE, and assumes they'll all be

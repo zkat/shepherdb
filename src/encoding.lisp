@@ -26,12 +26,12 @@
 ;;
 ;; So, our approach here is to take a sheep object and serialize all the metaobject properties
 ;; necessary for rebuilding the sheep as it was. These are:
-;; 1. Its direct-parents
+;; 1. Its parents
 ;;    Of course, we can't just dump anything into here, since we need something serializable.
-;;    For that reason, persistent-sheeple are only allowed to have =dolly= and other persistent-sheeple
+;;    For that reason, persistent-sheeple are only allowed to have #@dolly and other persistent-sheeple
 ;;    as their direct parents.
-;;    We cheat a little when it comes to =dolly=: Since we know she'll be back as soon as any sheep
-;;    is created, if the sheep object only has =dolly= as a direct-parent, we save that parents-list
+;;    We cheat a little when it comes to #@dolly: Since we know she'll be back as soon as any sheep
+;;    is created, if the sheep object only has #@dolly as a direct-parent, we save that parents-list
 ;;    as NIL.
 ;;    Another problem arises when it comes to saving persistent-sheeple: psheeple can have pointers
 ;;    to other psheep objects inside. Our approach in this case is to save those pointers as JSON
@@ -55,7 +55,7 @@ Sheeple needs in order to reload an identical sheep object."))
 (defmethod sheep->alist ((sheep standard-sheep))
   "This serializes a standard-sheep object. It's used mostly for testing, since the only sheep
 that should actually be serialized are PERSISTENT-SHEEP objects."
-  (let ((parents (sheep-direct-parents sheep))
+  (let ((parents (sheep-parents sheep))
         (property-values (loop for property in (sheep-direct-properties sheep)
                             collect (cons (property-spec-name property)
                                           (property-spec-value property))))
@@ -77,15 +77,10 @@ that should actually be serialized are PERSISTENT-SHEEP objects."
 (defmethod sheep->alist ((sheep persistent-sheep))
   "Convert SHEEP to an appropriate representation that will then be converted to JSON, 
 for the database to store."
-  (let ((parents (sheep-direct-parents sheep))
+  (let ((parents (sheep-parents sheep))
         ;; build an alist of alists by scanning the property-spec objects
-        (property-values (loop for property in (sheep-direct-properties sheep)
-                            collect (cons (property-spec-name property)
-                                          (property-spec-value property))))
-        (property-specs (loop for property in (sheep-direct-properties sheep)
-                           collect (list (cons :name (property-spec-name property))
-                                         (cons :readers (property-spec-readers property))
-                                         (cons :writers (property-spec-writers property)))))
+        (property-values nil)
+        (property-specs nil)
         ;; for the class, we just store the symbol
         (metaclass (class-name (class-of sheep)))
         ;; Nickname can either be a string or a symbol, documentation can be a string.
@@ -94,9 +89,9 @@ for the database to store."
         (documentation (sheep-documentation sheep)))
     (list
      ;; Because only persistent-sheeple can be turned to JSON, we can't involve standard-sheep
-     ;; objects in this. Thus, we get rid of =dolly=, since we can assume she'll be added
+     ;; objects in this. Thus, we get rid of #@dolly, since we can assume she'll be added
      ;; upon sheep re-creation.
-     (cons :parents (remove =dolly= parents))
+     (cons :parents (remove #@dolly parents))
      (cons :property-values property-values)
      (cons :property-specs property-specs)
      (cons :metaclass metaclass)
@@ -154,7 +149,7 @@ return the value, and T. If not, return NIL NIL."
 It doesn't actually do any loading/reloading of sheep -- instead, it just finds the appropriate
 object in *all-sheep*"
   (let ((db-id (cdr (assoc :%persistent-sheep-pointer pointer))))
-    (find-sheep-with-id db-id)))
+    (find-sheep db-id)))
 
 (defun db-entry->lisp-object (entry)
   "This takes care of turning ENTRY into an actual sheep object, if it's a pointer, or
@@ -168,7 +163,8 @@ the object itself otherwise."
 straight into the database. CLOUCHDB:ENCODE takes care of all the nasty details."
   (let ((document (get-document (db-id sheep))))
     (put-document
-     (set-document-property document :property-values
+     (set-document-property document
+                            :property-values
                             (let ((value-alist (document-property :property-values document)))
                               (if value-alist
                                   (let ((value-cons (assoc (as-keyword-symbol pname) value-alist)))
@@ -177,11 +173,12 @@ straight into the database. CLOUCHDB:ENCODE takes care of all the nasty details.
                                         (push (cons (as-keyword-symbol pname) new-value) 
                                               value-alist))
                                     value-alist)
-                                  (list (cons pname new-value))))))))
-
-
-
-
+                                  (list (cons pname new-value))))
+                            :property-specs
+                            (loop for property in (sheep-direct-properties sheep)
+                               collect (list (cons :name (property-spec-name property))
+                                             (cons :readers (property-spec-readers property))
+                                             (cons :writers (property-spec-writers property))))))))
 
 
 
