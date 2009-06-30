@@ -91,7 +91,10 @@ for the database to store."
      ;; Because only persistent-sheeple can be turned to JSON, we can't involve standard-sheep
      ;; objects in this. Thus, we get rid of #@dolly, since we can assume she'll be added
      ;; upon sheep re-creation.
-     (cons :parents (remove #@dolly parents))
+     (cons :parents (mapcar (lambda (par) (if (eql par #@dolly)
+                                              (list (cons :%dolly :%dolly))
+                                              par))
+                            parents))
      (cons :property-values property-values)
      (cons :property-specs property-specs)
      (cons :metaclass metaclass)
@@ -133,15 +136,12 @@ as a key. The CDR of the pointer cons is the unique database ID of the sheep obj
 ;;; inheritance
 ;;;
 (defun add-parent-externally (new-parent sheep)
-  (unless (persistent-sheep-p new-parent)
-    (error "~A is not a persistent sheep. Persistent sheeple may only have other persistent~
-            sheeple as parents." new-parent))
   (let ((doc (get-document (db-id sheep))))
    (put-document
     (set-document-property doc
                            :parents
                            (let ((old-parent-list (document-property :parents doc)))
-                             (append (list new-parent) old-parents-list))))))
+                             (append (list new-parent) old-parent-list))))))
 
 (defun remove-parent-externally (old-parent sheep)
   (let ((doc (get-document (db-id sheep))))
@@ -150,7 +150,7 @@ as a key. The CDR of the pointer cons is the unique database ID of the sheep obj
                             :parents
                             (let ((old-parent-list (document-property :parents doc)))
                               (remove old-parent
-                                      old-parents-list :test #'equal))))))
+                                      old-parent-list :test #'equal))))))
 
 ;;;
 ;;; Properties

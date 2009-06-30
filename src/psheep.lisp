@@ -71,9 +71,11 @@ the object to *all-sheep* for easy access."
 ;;; add/remove parent
 ;;;
 (defmethod add-parent :around (new-parent (sheep persistent-sheep))
-  (error "NEW-PARENT must be a persistent sheep."))
-(defmethod add-parent :around ((new-parent persistent-sheep) (sheep persistent-sheep))
-  (call-next-method)
+  (if (or (eql new-parent #@dolly) (persistent-sheep-p new-parent)) 
+      (call-next-method)
+      (error "NEW-PARENT must be a persistent sheep.")))
+
+(defmethod add-parent :after ((new-parent persistent-sheep) (sheep persistent-sheep))
   (add-parent-externally new-parent sheep))
 
 (defmethod remove-parent :after (parent (sheep persistent-sheep))

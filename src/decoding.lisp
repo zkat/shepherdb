@@ -55,7 +55,9 @@ corresponding arguments. Doing (alist->sheep (sheep->alist *sheep*)) should gene
 that are basically EQUAL (identical characteristics, not same object). This only applies, though,
 if no messages have been defined on *sheep*, except for readers/writers provided to spawn-sheep."
   (let ((parents (mapcar (lambda (pointer)
-                           (find-sheep-with-id (psheep-pointer-value pointer)))
+                           (if (assoc :%dolly pointer)
+                               #@dolly
+                               (find-sheep (psheep-pointer-value pointer))))
                          (cdr (assoc :parents alist))))
         (property-values (cdr (assoc :property-values alist)))
         (property-specs (cdr (assoc :property-specs alist)))
