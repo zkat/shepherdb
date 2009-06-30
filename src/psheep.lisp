@@ -30,6 +30,11 @@
   (:documentation "Persistent-sheep objects themselves are just like regular sheep, except they
 contain a DB-ID 'metavalue', which is used to uniquely identify the object in a database."))
 
+(defgeneric persistent-sheep-p (sheep))
+(defmethod persistent-sheep-p ((sheep persistent-sheep))
+  (declare (ignore sheep)) t)
+(defmethod persistent-sheep-p ((sheep standard-sheep))
+  (declare (ignore sheep)) nil)
 (defmethod initialize-instance :after ((sheep persistent-sheep) &key)
   "Every time a persistent-sheep object is created, we need to tell the database about it, and add
 the object to *all-sheep* for easy access."
@@ -86,14 +91,8 @@ the object to *all-sheep* for easy access."
                          &key readers writers (make-accessors-p t))
   (call-next-method sheep property-name nil :readers readers
                     :writers writers :make-accessors-p make-accessors-p)
+  (add-properties-externally sheep)
   (write-property-externally sheep property-name value)
-  (when readers
-    (add-readers-externally readers property-name sheep))
-  (when writers
-    (add-writers-externally writers property-name sheep))
-  (when make-accessors-p
-    (add-readers-externally `(,property-name) property-name sheep)
-    (add-writers-externally `((setf ,property-name)) property-name sheep))
   sheep)
 
 (defmethod direct-property-value ((sheep persistent-sheep) property-name)

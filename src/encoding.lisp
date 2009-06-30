@@ -130,8 +130,40 @@ as a key. The CDR of the pointer cons is the unique database ID of the sheep obj
         t nil)))
 
 ;;;
+;;; inheritance
+;;;
+(defun add-parent-externally (new-parent sheep)
+  (unless (persistent-sheep-p new-parent)
+    (error "~A is not a persistent sheep. Persistent sheeple may only have other persistent~
+            sheeple as parents." new-parent))
+  (let ((doc (get-document (db-id sheep))))
+   (put-document
+    (set-document-property doc
+                           :parents
+                           (let ((old-parent-list (document-property :parents doc)))
+                             (append (list new-parent) old-parents-list))))))
+
+(defun remove-parent-externally (old-parent sheep)
+  (let ((doc (get-document (db-id sheep))))
+    (put-document
+     (set-document-property doc
+                            :parents
+                            (let ((old-parent-list (document-property :parents doc)))
+                              (remove old-parent
+                                      old-parents-list :test #'equal))))))
+
+;;;
 ;;; Properties
 ;;;
+(defun add-properties-externally (sheep)
+  (put-document
+   (set-document-property (get-document (db-id sheep))
+                          :property-specs
+                          (loop for property in (sheep-direct-properties sheep)
+                             collect (list (cons :name (property-spec-name property))
+                                           (cons :readers (property-spec-readers property))
+                                           (cons :writers (property-spec-writers property)))))))
+
 (defun read-property-externally (sheep pname)
   "Get the property directly from the sheep document, using the SHEEP's ID. If it's there,
 return the value, and T. If not, return NIL NIL."
@@ -173,12 +205,5 @@ straight into the database. CLOUCHDB:ENCODE takes care of all the nasty details.
                                         (push (cons (as-keyword-symbol pname) new-value) 
                                               value-alist))
                                     value-alist)
-                                  (list (cons pname new-value))))
-                            :property-specs
-                            (loop for property in (sheep-direct-properties sheep)
-                               collect (list (cons :name (property-spec-name property))
-                                             (cons :readers (property-spec-readers property))
-                                             (cons :writers (property-spec-writers property))))))))
-
-
+                                  (list (cons pname new-value))))))))
 
