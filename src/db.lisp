@@ -66,5 +66,9 @@
 (defmessage put-document (db doc)
   (:reply ((db =database=) doc)
     (db-request db :uri (id doc)
-                :content (json:encode-json-alist-to-string
-                          (remove :_id (remove :id doc :key 'car) :key 'car)))))
+                :content (json:encode-json-alist-to-string doc))))
+
+(defmessage update-document (db id revision doc)
+  (:reply ((db =database=) id revision doc)
+    (db-request db :uri (format nil "~A?rev=~A" id revision)
+                :content (json:encode-json-alist-to-string doc))))
