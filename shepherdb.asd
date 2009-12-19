@@ -7,4 +7,7 @@
   :licence "LLGPL"
   :depends-on (drakma sheeple cl-json)
   :serial t
-  :components ())
+  :components
+  ((:file "package")
+   (:file "db")))
+
