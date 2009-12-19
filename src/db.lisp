@@ -26,7 +26,7 @@
 
 ;;; Database errors
 (define-condition database-error (couchdb-error)
-  ((uri :initarg :uri :reader :database-error-uri)))
+  ((uri :initarg :uri :reader database-error-uri)))
 
 (define-condition db-not-found (database-error)
   ()
@@ -53,9 +53,9 @@
   ((host "127.0.0.1")
    (port 5984)
    (name nil))
-  (:documentation
-   "Base database prototype. These objects represent the information required in order to communicate
-with a particular CouchDB database."))
+  :documentation
+  "Base database prototype. These objects represent the information required in order to communicate
+with a particular CouchDB database.")
 
 (defmessage db->url (db)
   (:documentation "Converts the connection information in DB into a URL string.")
@@ -65,33 +65,45 @@ with a particular CouchDB database."))
 
 (defmessage db-request (db &key)
   (:documentation "Sends a CouchDB request to DB.")
-  (:reply ((db =database=) &key (uri "") (method :get) content)
-  (let ((db-reply (json:decode-json-from-string
-                     (http-request (format nil "~A/~A" (db->url db) uri)
-                                   :method method
-                                   :content content))))
-      ;; TODO - This should use the status code instead of searching for :error.
-      (if (assoc :error db-reply)
-          (signal-couchdb-error db-reply)
-          db-reply))))
+  (:reply ((db =database=) &key (uri "") (method :get) content
+           (external-format-out *drakma-default-external-format*))
+    (multiple-value-bind (response status-code)
+        (http-request (format nil "~A/~A" (db->url db) uri) :method method :content content
+                      :external-format-out external-format-out)
+      (values response (or (cdr (assoc status-code *status-codes* :test #'=))
+                           ;; The code should never get here once we know all the
+                           ;; status codes CouchDB might return.
+                           (error "Unknown status code: ~A. HTTP Response: ~A"
+                                  status-code response))))))
+
 
 (defun connect-to-db (name &key (host "127.0.0.1") (port 5984) (prototype =database=))
   "Confirms that a particular CouchDB database exists. If so, returns a new database object
 that can be used to perform operations on it."
   (let ((db (create prototype 'host host 'port port 'name name)))
-    (db-request db)
-    db))
+    (multiple-value-bind (response status-code) (db-request db)
+      (case status-code
+        (:ok db)
+        (:not-found (error 'db-not-found :uri (db->url db)))
+        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
 (defun create-db (name &key (host "127.0.0.1") (port 5984) (prototype =database=))
   "Creates a new CouchDB database. Returns a database object that can be used to operate on it."
   (let ((db (create prototype 'host host 'port port 'name name)))
-    (db-request db :method :put)
-    db))
+    (multiple-value-bind (response status-code) (db-request db :method :put)
+      (case status-code
+        (:created db)
+        (:precondition-failed (error 'db-already-exists :uri (db->url db)))
+        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
 (defmessage delete-db (db &key)
   (:documentation "Deletes a CouchDB database.")
   (:reply ((db =database=) &key)
-    (db-request db :method :delete)))
+    (multiple-value-bind (response status-code) (db-request db :method :delete)
+      (case status-code
+        (:ok t)
+        (:not-found (error 'db-not-found :uri (db->url db)))
+        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
 ;;;
 ;;; Documents
