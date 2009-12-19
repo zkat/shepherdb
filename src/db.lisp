@@ -13,9 +13,13 @@
 (defproto =database= ()
   ((host "127.0.0.1")
    (port 5984)
-   (name nil)))
+   (name nil))
+  (:documentation
+   "Base database prototype. These objects represent the information required in order to communicate
+with a particular CouchDB database."))
 
 (defmessage db->url (db)
+  (:documentation "Converts the connection information in DB into a URL string.")
   (:reply ((db =database=))
     (with-properties (host port name) db
       (format nil "http://~A:~A/~A" host port name))))
@@ -29,65 +33,78 @@
                      (error-reason condition)))))
 
 (defun signal-couchdb-error (error-msg)
+  "Signals a CouchDB error based on the error message returned by the database."
+  ;; TODO - Expand this to give more useful errors.
   (error 'couchdb-error
          :name (cdr (assoc :error error-msg))
          :reason (cdr (assoc :reason error-msg))))
 
 (defmessage db-request (db &key)
+  (:documentation "Sends a CouchDB request to DB.")
   (:reply ((db =database=) &key (uri "") (method :get) content)
   (let ((db-reply (json:decode-json-from-string
                      (http-request (format nil "~A/~A" (db->url db) uri)
                                    :method method
                                    :content content))))
+      ;; TODO - This should use the status code instead of searching for :error.
       (if (assoc :error db-reply)
           (signal-couchdb-error db-reply)
           db-reply))))
 
 (defun connect-to-db (name &key (host "127.0.0.1") (port 5984) (prototype =database=))
+  "Confirms that a particular CouchDB database exists. If so, returns a new database object
+that can be used to perform operations on it."
   (let ((db (create prototype 'host host 'port port 'name name)))
     (db-request db)
     db))
 
 (defun create-db (name &key (host "127.0.0.1") (port 5984) (prototype =database=))
+  "Creates a new CouchDB database. Returns a database object that can be used to operate on it."
   (let ((db (create prototype 'host host 'port port 'name name)))
     (db-request db :method :put)
     db))
 
 (defmessage delete-db (db &key)
+  (:documentation "Deletes a CouchDB database.")
   (:reply ((db =database=) &key)
     (db-request db :method :delete)))
 
 ;;;
 ;;; Documents
 ;;;
-(defun id (doc)
-  (or (cdr (assoc :id doc))
-      (cdr (assoc :_id doc))))
-
-(defun revision (doc)
-  (or (cdr (assoc :_rev doc))
-      (cdr (assoc :rev doc))))
-
 (defmessage get-document (db id)
+  (:documentation "Returns an CouchDB document from DB as an alist.")
   (:reply ((db =database=) id)
+    ;; TODO - because of the way ids and revisions can be inside the JSON object's body,
+    ;;        the interface for this message should probably be reworked.
     (db-request db :uri id)))
 
 (defmessage all-documents (db)
+  (:documentation "Returns all CouchDB documents in DB, in alist form.")
   (:reply ((db =database=))
     (db-request db :uri "_all_docs")))
 
 (defmessage put-document (db id doc)
+  (:documentation "Puts a new document into DB, using ID.")
   (:reply ((db =database=) id doc)
+    ;; TODO - because of the way ids and revisions can be inside the JSON object's body,
+    ;;        the interface for this message should probably be reworked.
     (cdr (assoc :rev (db-request db :uri id :method :put
-                                 :content (json:encode-json-alist-to-string doc)
-                                 :external-format-out +utf-8+)))))
+                                 :external-format-out +utf-8+
+                                 :content (json:encode-json-alist-to-string doc))))))
 
 (defmessage update-document (db id revision doc)
+  (:documentation "Updates an existing document.")
   (:reply ((db =database=) id revision doc)
+    ;; TODO - because of the way ids and revisions can be inside the JSON object's body,
+    ;;        the interface for this message should probably be reworked.
     (cdr (assoc :rev (db-request db :uri (format nil "~A?rev=~A" id revision)
                                  :method :put :external-format-out +utf-8+
                                  :content (json:encode-json-alist-to-string doc))))))
 
 (defmessage delete-document (db id revision)
+  (:documentation "Deletes an existing document.")
   (:reply ((db =database=) id revision)
+    ;; TODO - because of the way ids and revisions can be inside the JSON object's body,
+    ;;        the interface for this message should probably be reworked.
     (cdr (assoc :rev (db-request db :uri (format nil "~A?rev=~A" id revision) :method :delete)))))
