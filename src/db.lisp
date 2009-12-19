@@ -143,13 +143,22 @@ that can be used to perform operations on it."
         (:not-found (error 'document-not-found))
         (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
-(defmessage all-documents (db)
+(defmessage all-documents (db &key)
   (:documentation "Returns all CouchDB documents in DB, in alist form.")
-  (:reply ((db =database=))
-    (multiple-value-bind (response status-code) (db-request db :uri "_all_docs")
-      (case status-code
-        (:ok response)
-        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
+  (:reply ((db =database=) &key startkey endkey limit)
+    (let (params)
+      (when startkey
+        (push `("startkey" . ,(prin1-to-string startkey)) params))
+      (when endkey
+        (push `("endkey" . ,(prin1-to-string endkey)) params))
+      (when limit
+        (push `("limit" . ,(prin1-to-string limit)) params))
+      (multiple-value-bind (response status-code)
+          (db-request db :uri "_all_docs"
+                      :parameters params)
+        (case status-code
+          (:ok response)
+          (otherwise (error 'unexpected-response :status-code status-code :response response)))))))
 
 (defmessage put-document (db id doc)
   (:documentation "Puts a new document into DB, using ID.")
