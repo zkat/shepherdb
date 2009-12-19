@@ -78,14 +78,13 @@
 
 (defmessage put-document (db id doc)
   (:reply ((db =database=) id doc)
-    (db-request db :uri id
-                :method :put
-                :content (json:encode-json-alist-to-string doc)
-                :external-format-out +utf-8+)))
+    (cdr (assoc :rev (db-request db :uri id :method :put
+                                 :content (json:encode-json-alist-to-string doc)
+                                 :external-format-out +utf-8+)))))
 
 (defmessage update-document (db id revision doc)
   (:reply ((db =database=) id revision doc)
-    (db-request db :uri (format nil "~A?rev=~A" id revision)
-                :method :put
-                :content (json:encode-json-alist-to-string doc)
-                :external-format-out +utf-8+)))
+    (cdr (assoc :rev (db-request db :uri (format nil "~A?rev=~A" id revision)
+                                 :method :put :external-format-out +utf-8+
+                                 :content (json:encode-json-alist-to-string doc))))))
+
