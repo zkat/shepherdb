@@ -1,3 +1,3 @@
 (in-package :cl-user)
 (defpackage #:shepherdb
-  (:use :cl :sheeple :drakma))
+  (:use :cl :sheeple :drakma :flexi-streams))

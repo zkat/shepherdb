@@ -2,6 +2,14 @@
 ;;;;
 (in-package :shepherdb)
 
+(defmacro define-constant (name value &optional doc)
+  "A version of DEFCONSTANT for /strict/ CL implementations."
+  ;; See <http://www.sbcl.org/manual/Defining-Constants.html>
+  `(defconstant ,name (if (boundp ',name) (symbol-value ',name) ,value)
+     ,@(when doc (list doc))))
+(define-constant +utf-8+ (make-external-format :utf-8 :eol-style :lf)
+  "Default external format for document content.")
+
 (defproto =database= ()
   ((host "127.0.0.1")
    (port 5984)
@@ -63,12 +71,16 @@
   (:reply ((db =database=))
     (db-request db :uri "_all_docs")))
 
-(defmessage put-document (db doc)
-  (:reply ((db =database=) doc)
-    (db-request db :uri (id doc)
-                :content (json:encode-json-alist-to-string doc))))
+(defmessage put-document (db id doc)
+  (:reply ((db =database=) id doc)
+    (db-request db :uri id
+                :method :put
+                :content (json:encode-json-alist-to-string doc)
+                :external-format-out +utf-8+)))
 
 (defmessage update-document (db id revision doc)
   (:reply ((db =database=) id revision doc)
     (db-request db :uri (format nil "~A?rev=~A" id revision)
-                :content (json:encode-json-alist-to-string doc))))
+                :method :put
+                :content (json:encode-json-alist-to-string doc)
+                :external-format-out +utf-8+)))

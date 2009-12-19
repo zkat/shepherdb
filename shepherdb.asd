@@ -5,7 +5,7 @@
   :maintainer "Kat Marchán <zkat@Dagon>"
   :author "Kat Marchán <zkat@Dagon>"
   :licence "LLGPL"
-  :depends-on (drakma sheeple cl-json)
+  :depends-on (drakma sheeple cl-json flexi-streams)
   :serial t
   :components
   ((:module src
