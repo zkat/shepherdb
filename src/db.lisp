@@ -1,7 +1,46 @@
-;;;; Basic database API
-;;;;
 (in-package :shepherdb)
 
+;;;
+;;; Status codes
+;;;
+(defparameter *status-codes* '((200 . :ok)
+                               (201 . :created)
+                               (202 . :accepted)
+                               (404 . :not-found)
+                               (409 . :conflict)
+                               (412 . :precondition-failed)))
+
+;;;
+;;; Conditions
+;;;
+(define-condition couchdb-error () ())
+
+(define-condition unexpected-response (couchdb-error)
+  ((status-code :initarg :status-code :reader error-status-code)
+   (response :initarg :response :reader error-response))
+  (:report (lambda (condition stream)
+             (format stream "Unexpected response with status code: ~A~@
+                             HTTP Response: ~A"
+                     (error-status-code condition)
+                     (error-response condition)))))
+
+;;; Database errors
+(define-condition database-error (couchdb-error)
+  ((uri :initarg :uri :reader :database-error-uri)))
+
+(define-condition db-not-found (database-error)
+  ()
+  (:report (lambda (condition stream)
+             (format stream "Database ~A not found." (database-error-uri condition)))))
+
+(define-condition db-already-exists (database-error)
+  ()
+  (:report (lambda (condition stream)
+             (format stream "Database ~A already exists." (database-error-uri condition)))))
+
+;;;
+;;; Basic database API
+;;;
 (defmacro define-constant (name value &optional doc)
   "A version of DEFCONSTANT for /strict/ CL implementations."
   ;; See <http://www.sbcl.org/manual/Defining-Constants.html>
@@ -23,21 +62,6 @@ with a particular CouchDB database."))
   (:reply ((db =database=))
     (with-properties (host port name) db
       (format nil "http://~A:~A/~A" host port name))))
-
-(define-condition couchdb-error ()
-  ((name :initarg :name :reader error-name)
-   (reason :initarg :reason :reader error-reason))
-  (:report (lambda (condition stream)
-             (format stream "Error: ~A, Reason: ~A"
-                     (error-name condition)
-                     (error-reason condition)))))
-
-(defun signal-couchdb-error (error-msg)
-  "Signals a CouchDB error based on the error message returned by the database."
-  ;; TODO - Expand this to give more useful errors.
-  (error 'couchdb-error
-         :name (cdr (assoc :error error-msg))
-         :reason (cdr (assoc :reason error-msg))))
 
 (defmessage db-request (db &key)
   (:documentation "Sends a CouchDB request to DB.")
