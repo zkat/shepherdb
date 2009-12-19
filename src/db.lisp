@@ -86,15 +86,20 @@ with a particular CouchDB database.")
                            (error "Unknown status code: ~A. HTTP Response: ~A"
                                   status-code response))))))
 
-(defun connect-to-db (name &key (host "127.0.0.1") (port 5984) (prototype =database=))
-  "Confirms that a particular CouchDB database exists. If so, returns a new database object
-that can be used to perform operations on it."
-  (let ((db (create prototype 'host host 'port port 'name name)))
+(defmessage db-info (db)
+  (:reply ((db =database=))
     (multiple-value-bind (response status-code) (db-request db)
       (case status-code
         (:ok db)
         (:not-found (error 'db-not-found :uri (db->url db)))
         (otherwise (error 'unexpected-response :status-code status-code :response response))))))
+
+(defun connect-to-db (name &key (host "127.0.0.1") (port 5984) (prototype =database=))
+  "Confirms that a particular CouchDB database exists. If so, returns a new database object
+that can be used to perform operations on it."
+  (let ((db (create prototype 'host host 'port port 'name name)))
+    (when (db-info db)
+      db)))
 
 (defun create-db (name &key (host "127.0.0.1") (port 5984) (prototype =database=))
   "Creates a new CouchDB database. Returns a database object that can be used to operate on it."
