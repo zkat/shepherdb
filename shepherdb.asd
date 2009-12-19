@@ -8,6 +8,9 @@
   :depends-on (drakma sheeple cl-json)
   :serial t
   :components
-  ((:file "package")
-   (:file "db")))
+  ((:module src
+            :serial t
+            :components
+            ((:file "package")
+             (:file "db")))))
 
