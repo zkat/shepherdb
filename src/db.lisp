@@ -76,10 +76,14 @@ with a particular CouchDB database.")
 (defmessage db-request (db &key)
   (:documentation "Sends a CouchDB request to DB.")
   (:reply ((db =database=) &key (uri "") (method :get) content
-           (external-format-out *drakma-default-external-format*))
+           (external-format-out *drakma-default-external-format*)
+           parameters additional-headers)
     (multiple-value-bind (response status-code)
         (http-request (format nil "~A/~A" (db->url db) uri) :method method :content content
-                      :external-format-out external-format-out)
+                      :external-format-out external-format-out
+                      :content-type "application/json"
+                      :parameters parameters
+                      :additional-headers additional-headers)
       (values response (or (cdr (assoc status-code *status-codes* :test #'=))
                            ;; The code should never get here once we know all the
                            ;; status codes CouchDB might return.
@@ -126,6 +130,7 @@ that can be used to perform operations on it."
       (case status-code
         (:accepted response)
         (otherwise (error 'unexpected-response :status-code status-code :response response))))))
+
 ;;;
 ;;; Documents
 ;;;
@@ -167,3 +172,12 @@ that can be used to perform operations on it."
         (:ok response)
         (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
+(defmessage copy-document (db from-id to-id &key)
+  (:reply ((db =database=) from-id to-id &key revision)
+    (multiple-value-bind (response status-code)
+        (db-request db :uri from-id :method :copy
+                    :additional-headers `(("Destination" . ,to-id))
+                    :parameters `(,(when revision `(("rev" . ,revision)))))
+      (case status-code
+        (:created response)
+        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
