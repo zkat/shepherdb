@@ -38,6 +38,13 @@
   (:report (lambda (condition stream)
              (format stream "Database ~A already exists." (database-error-uri condition)))))
 
+;;; Document errors
+(define-condition document-error (couchdb-error) ())
+
+(define-condition document-not-found (document-error) ())
+
+(define-condition document-conflict (document-error) ())
+
 ;;;
 ;;; Basic database API
 ;;;
@@ -76,7 +83,6 @@ with a particular CouchDB database.")
                            (error "Unknown status code: ~A. HTTP Response: ~A"
                                   status-code response))))))
 
-
 (defun connect-to-db (name &key (host "127.0.0.1") (port 5984) (prototype =database=))
   "Confirms that a particular CouchDB database exists. If so, returns a new database object
 that can be used to perform operations on it."
@@ -111,36 +117,49 @@ that can be used to perform operations on it."
 (defmessage get-document (db id)
   (:documentation "Returns an CouchDB document from DB as an alist.")
   (:reply ((db =database=) id)
-    ;; TODO - because of the way ids and revisions can be inside the JSON object's body,
-    ;;        the interface for this message should probably be reworked.
-    (db-request db :uri id)))
+    (multiple-value-bind (response status-code) (db-request db :uri id)
+      (case status-code
+        (:ok response)
+        (:not-found (error 'document-not-found))
+        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
 (defmessage all-documents (db)
   (:documentation "Returns all CouchDB documents in DB, in alist form.")
   (:reply ((db =database=))
-    (db-request db :uri "_all_docs")))
+    (multiple-value-bind (response status-code) (db-request db :uri "_all_docs")
+      (case status-code
+        (:ok response)
+        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
 (defmessage put-document (db id doc)
   (:documentation "Puts a new document into DB, using ID.")
   (:reply ((db =database=) id doc)
-    ;; TODO - because of the way ids and revisions can be inside the JSON object's body,
-    ;;        the interface for this message should probably be reworked.
-    (cdr (assoc :rev (db-request db :uri id :method :put
-                                 :external-format-out +utf-8+
-                                 :content (json:encode-json-alist-to-string doc))))))
+    (multiple-value-bind (response status-code)
+        (db-request db :uri id :method :put
+                    :external-format-out +utf-8+
+                    :content doc)
+      (case status-code
+        (:created response)
+        (:conflict (error 'document-conflict))
+        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
 (defmessage update-document (db id revision doc)
   (:documentation "Updates an existing document.")
   (:reply ((db =database=) id revision doc)
-    ;; TODO - because of the way ids and revisions can be inside the JSON object's body,
-    ;;        the interface for this message should probably be reworked.
-    (cdr (assoc :rev (db-request db :uri (format nil "~A?rev=~A" id revision)
-                                 :method :put :external-format-out +utf-8+
-                                 :content (json:encode-json-alist-to-string doc))))))
+    (multiple-value-bind (response status-code)
+        (db-request db :uri (format nil "~A?rev=~A" id revision)
+                    :method :put :external-format-out +utf-8+
+                    :content doc)
+      (case status-code
+        (:created response)
+        (:conflict (error 'document-conflict))
+        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
 (defmessage delete-document (db id revision)
   (:documentation "Deletes an existing document.")
   (:reply ((db =database=) id revision)
-    ;; TODO - because of the way ids and revisions can be inside the JSON object's body,
-    ;;        the interface for this message should probably be reworked.
-    (cdr (assoc :rev (db-request db :uri (format nil "~A?rev=~A" id revision) :method :delete)))))
+    (multiple-value-bind (response status-code)
+        (db-request db :uri (format nil "~A?rev=~A" id revision) :method :delete)
+      (case status-code
+        (:ok response)
+        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
