@@ -35,9 +35,10 @@
 
 (defmessage db-request (db &key)
   (:reply ((db =database=) &key (uri "") (method :get) content)
-    (let ((db-reply (json:decode-json-from-string
-                     (http-request (format nil "~A/~A" (db->url db) uri
-                                           :method method :content content)))))
+  (let ((db-reply (json:decode-json-from-string
+                     (http-request (format nil "~A/~A" (db->url db) uri)
+                                   :method method
+                                   :content content))))
       (if (assoc :error db-reply)
           (signal-couchdb-error db-reply)
           db-reply))))
