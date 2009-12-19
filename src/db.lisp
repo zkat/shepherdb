@@ -115,10 +115,17 @@ that can be used to perform operations on it."
   (:reply ((db =database=) &key)
     (multiple-value-bind (response status-code) (db-request db :method :delete)
       (case status-code
-        (:ok t)
+        (:ok response)
         (:not-found (error 'db-not-found :uri (db->url db)))
         (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
+(defmessage compact-db (db)
+  (:reply ((db =database=))
+    (multiple-value-bind (response status-code)
+        (db-request db :uri "_compact" :method :post)
+      (case status-code
+        (:accepted response)
+        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 ;;;
 ;;; Documents
 ;;;
@@ -159,3 +166,4 @@ that can be used to perform operations on it."
       (case status-code
         (:ok response)
         (otherwise (error 'unexpected-response :status-code status-code :response response))))))
+
