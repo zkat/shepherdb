@@ -53,6 +53,10 @@
     (db-request db :method :put)
     db))
 
+(defmessage delete-db (db &key)
+  (:reply ((db =database=) &key)
+    (db-request db :method :delete)))
+
 ;;;
 ;;; Documents
 ;;;
