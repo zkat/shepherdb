@@ -88,3 +88,6 @@
                                  :method :put :external-format-out +utf-8+
                                  :content (json:encode-json-alist-to-string doc))))))
 
+(defmessage delete-document (db id revision)
+  (:reply ((db =database=) id revision)
+    (cdr (assoc :rev (db-request db :uri (format nil "~A?rev=~A" id revision) :method :delete)))))
