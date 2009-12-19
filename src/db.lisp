@@ -70,6 +70,9 @@ with a particular CouchDB database.")
     (with-properties (host port name) db
       (format nil "http://~A:~A/~A" host port name))))
 
+;; TODO - CouchDB places restrictions on what sort of URLs are accepted, such as everything having
+;;        to be downcase, and only certain characters being accepted. There is also special meaning
+;;        behing the use of /, so a mechanism to escape it in certain situations would be good.
 (defmessage db-request (db &key)
   (:documentation "Sends a CouchDB request to DB.")
   (:reply ((db =database=) &key (uri "") (method :get) content
