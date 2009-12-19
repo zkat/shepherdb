@@ -143,18 +143,6 @@ that can be used to perform operations on it."
         (:conflict (error 'document-conflict))
         (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
-(defmessage update-document (db id revision doc)
-  (:documentation "Updates an existing document.")
-  (:reply ((db =database=) id revision doc)
-    (multiple-value-bind (response status-code)
-        (db-request db :uri (format nil "~A?rev=~A" id revision)
-                    :method :put :external-format-out +utf-8+
-                    :content doc)
-      (case status-code
-        (:created response)
-        (:conflict (error 'document-conflict))
-        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
-
 (defmessage delete-document (db id revision)
   (:documentation "Deletes an existing document.")
   (:reply ((db =database=) id revision)
