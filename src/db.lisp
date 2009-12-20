@@ -186,7 +186,7 @@ that can be used to perform operations on it."
         (db-request db :uri "_all_docs"
                     :parameters '(("include_docs" . "true"))
                     :method :post
-                    :content (json:encode-json-alist-to-string `(("keys" . ,doc-ids))))
+                    :content (format nil "{\"foo\":[~{~S~^,~}]}" doc-ids))
       (case status-code
         (:ok response)
         (otherwise (error 'unexpected-response :status-code status-code :response response))))))
