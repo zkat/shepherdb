@@ -102,6 +102,17 @@ with a particular CouchDB database.")
 ;;        behing the use of /, so a mechanism to escape it in certain situations would be good.
 (defmessage db-request (db &key)
   (:documentation "Sends a CouchDB request to DB.")
+  ;; A note about this weirdness: The reason db-requests are so "unclean" is that
+  ;; we use status codes for the various CouchDB requests to figure out if we got a
+  ;; response we expected, and to detect errors. The downside of this approach is that
+  ;; we must manually specify which HTTP response each reply that calls db-request accepts.
+  ;;
+  ;; There are, though, two big advantages to this approach:
+  ;; 1. We do not need to deserialize JSON at all in order to figure out what happened.
+  ;; 2. We get very descriptive errors with minimal overhead (not having to check a JSON object)
+  ;;
+  ;; Also as a result of this decision, the code in this file does not depend on a JSON library.
+  ;; The user is free to handle serialization and deserialization themselves, and only when they need to.
   (:reply ((db =database=) &key (uri "") (method :get) content
            (external-format-out *drakma-default-external-format*)
            parameters additional-headers)
