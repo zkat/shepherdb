@@ -178,14 +178,10 @@ that can be used to perform operations on it."
   (:documentation "Returns all CouchDB documents in DB, in alist form.")
   (:reply ((db =database=) &key startkey endkey limit include-docs)
     (let (params)
-      (when startkey
-        (push `("startkey" . ,(prin1-to-string startkey)) params))
-      (when endkey
-        (push `("endkey" . ,(prin1-to-string endkey)) params))
-      (when limit
-        (push `("limit" . ,(prin1-to-string limit)) params))
-      (when include-docs
-        (push `("include_docs" . "true") params))
+      (when startkey (push `("startkey" . ,(prin1-to-string startkey)) params))
+      (when endkey (push `("endkey" . ,(prin1-to-string endkey)) params))
+      (when limit (push `("limit" . ,(prin1-to-string limit)) params))
+      (when include-docs (push `("include_docs" . "true") params))
       (handle-request response (db-request db :uri "_all_docs" :parameters params)
         (:ok response)))))
 
@@ -222,5 +218,5 @@ that can be used to perform operations on it."
     (handle-request response
         (db-request db :uri from-id :method :copy
                     :additional-headers `(("Destination" . ,to-id))
-                    :parameters `(,(when revision `(("rev" . ,revision)))))
+                    :parameters `(,(when revision `("rev" . ,revision))))
       (:created response))))
