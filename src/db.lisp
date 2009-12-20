@@ -186,15 +186,17 @@ that can be used to perform operations on it."
         (:ok response)
         (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
-(defmessage put-document (db id doc)
+(defmessage put-document (db id doc &key)
   (:documentation "Puts a new document into DB, using ID.")
-  (:reply ((db =database=) id doc)
+  (:reply ((db =database=) id doc &key batch-ok-p)
     (multiple-value-bind (response status-code)
         (db-request db :uri id :method :put
                     :external-format-out +utf-8+
-                    :content doc)
+                    :content doc
+                    :parameters (when batch-ok-p '(("batch" . "ok"))))
       (case status-code
         (:created response)
+        (:accepted response)
         (:conflict (error 'document-conflict))
         (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
