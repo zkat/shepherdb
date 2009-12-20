@@ -3,12 +3,13 @@
 ;;;
 ;;; Status codes
 ;;;
-(defparameter *status-codes* '((200 . :ok)
-                               (201 . :created)
-                               (202 . :accepted)
-                               (404 . :not-found)
-                               (409 . :conflict)
-                               (412 . :precondition-failed)))
+(defparameter *status-codes*
+  '((200 . :ok)
+    (201 . :created)
+    (202 . :accepted)
+    (404 . :not-found)
+    (409 . :conflict)
+    (412 . :precondition-failed)))
 
 ;;;
 ;;; Conditions
@@ -24,7 +25,9 @@
                      (error-status-code condition)
                      (error-response condition)))))
 
+;;;
 ;;; Database errors
+;;;
 (define-condition database-error (couchdb-error)
   ((uri :initarg :uri :reader database-error-uri)))
 
@@ -38,7 +41,9 @@
   (:report (lambda (condition stream)
              (format stream "Database ~A already exists." (database-error-uri condition)))))
 
+;;;
 ;;; Document errors
+;;;
 (define-condition document-error (couchdb-error) ())
 
 (define-condition document-not-found (document-error) ())
