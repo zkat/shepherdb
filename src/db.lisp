@@ -63,6 +63,7 @@
   :documentation
   "Base database prototype. These objects represent the information required in order to communicate
 with a particular CouchDB database.")
+;; These extra replies handle automatic caching of the db-namestring used by db-request.
 (defreply (setf host) :after (new-value (db =database=))
   (declare (ignore new-value))
   (setf (db-namestring db) (db->url db)))
@@ -103,6 +104,7 @@ with a particular CouchDB database.")
                                   status-code response))))))
 
 (defmessage db-info (db)
+  (:documentation "Fetches info about a given database from the CouchDB server.")
   (:reply ((db =database=))
     (multiple-value-bind (response status-code) (db-request db)
       (case status-code
@@ -168,13 +170,13 @@ that can be used to perform operations on it."
       (when include-docs
         (push `("include_docs" . "true") params))
       (multiple-value-bind (response status-code)
-          (db-request db :uri "_all_docs"
-                      :parameters params)
+          (db-request db :uri "_all_docs" :parameters params)
         (case status-code
           (:ok response)
           (otherwise (error 'unexpected-response :status-code status-code :response response)))))))
 
 (defmessage batch-get-documents (db &rest doc-ids)
+  (:documentation "Uses _all_docs to quickly fetch the given DOC-IDS in a single request.")
   (:reply ((db =database=) &rest doc-ids)
     (multiple-value-bind (response status-code)
         (db-request db :uri "_all_docs"
