@@ -46,9 +46,22 @@
 ;;;
 (define-condition document-error (couchdb-error) ())
 
-(define-condition document-not-found (document-error) ())
+(define-condition document-not-found (document-error)
+  ((id :initarg :id :reader document-404-id)
+   (db :initarg :db :reader document-404-db))
+  (:report (lambda (e s)
+             (format s "No document with id ~S was found in ~A"
+                     (document-404-id e)
+                     (document-404-db e)))))
 
-(define-condition document-conflict (document-error) ())
+(define-condition document-conflict (document-error)
+  ((conflicting-doc :initarg :doc :reader conflicting-document)
+   (conflicting-doc-id :initarg :id :reader conflicting-document-id))
+  (:report (lambda (e s)
+             (format s "Revision for ~A conflicts with latest revision for~@
+                        document with ID ~S"
+                     (conflicting-document e)
+                     (conflicting-document-id e)))))
 
 ;;;
 ;;; Basic database API
@@ -103,14 +116,20 @@ with a particular CouchDB database.")
                            (error "Unknown status code: ~A. HTTP Response: ~A"
                                   status-code response))))))
 
+(defmacro handle-request (result-var request &body expected-responses)
+  (let ((status-code (gensym "STATUS-CODE-")))
+    `(multiple-value-bind (,result-var ,status-code)
+         ,request
+       (case ,status-code
+         ,@expected-responses
+         (otherwise (error 'unexpected-response :status-code ,status-code :response ,result-var))))))
+
 (defmessage db-info (db)
   (:documentation "Fetches info about a given database from the CouchDB server.")
   (:reply ((db =database=))
-    (multiple-value-bind (response status-code) (db-request db)
-      (case status-code
-        (:ok db)
-        (:not-found (error 'db-not-found :uri (db-namestring db)))
-        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
+    (handle-request response (db-request db)
+      (:ok response)
+      (:not-found (error 'db-not-found :uri (db-namestring db))))))
 
 (defun connect-to-db (name &key (host "127.0.0.1") (port 5984) (prototype =database=))
   "Confirms that a particular CouchDB database exists. If so, returns a new database object
@@ -122,11 +141,9 @@ that can be used to perform operations on it."
 (defun create-db (name &key (host "127.0.0.1") (port 5984) (prototype =database=))
   "Creates a new CouchDB database. Returns a database object that can be used to operate on it."
   (let ((db (create prototype 'host host 'port port 'name name)))
-    (multiple-value-bind (response status-code) (db-request db :method :put)
-      (case status-code
-        (:created db)
-        (:precondition-failed (error 'db-already-exists :uri (db-namestring db)))
-        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
+    (handle-request response (db-request db :method :put)
+      (:created db)
+      (:precondition-failed (error 'db-already-exists :uri (db-namestring db))))))
 
 (defun ensure-db (name &rest all-keys)
   "Either connects to an existing database, or creates a new one.
@@ -137,19 +154,15 @@ that can be used to perform operations on it."
 (defmessage delete-db (db &key)
   (:documentation "Deletes a CouchDB database.")
   (:reply ((db =database=) &key)
-    (multiple-value-bind (response status-code) (db-request db :method :delete)
-      (case status-code
-        (:ok response)
-        (:not-found (error 'db-not-found :uri (db-namestring db)))
-        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
+    (handle-request response (db-request db :method :delete)
+      (:ok response)
+      (:not-found (error 'db-not-found :uri (db-namestring db))))))
 
 (defmessage compact-db (db)
+  (:documentation "Triggers a database compaction.")
   (:reply ((db =database=))
-    (multiple-value-bind (response status-code)
-        (db-request db :uri "_compact" :method :post)
-      (case status-code
-        (:accepted response)
-        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
+    (handle-request response (db-request db :uri "_compact" :method :post)
+      (:accepted response))))
 
 ;;;
 ;;; Documents
@@ -157,11 +170,9 @@ that can be used to perform operations on it."
 (defmessage get-document (db id)
   (:documentation "Returns an CouchDB document from DB as an alist.")
   (:reply ((db =database=) id)
-    (multiple-value-bind (response status-code) (db-request db :uri id)
-      (case status-code
-        (:ok response)
-        (:not-found (error 'document-not-found))
-        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
+    (handle-request response (db-request db :uri id)
+      (:ok response)
+      (:not-found (error 'document-not-found :db db :id id)))))
 
 (defmessage all-documents (db &key)
   (:documentation "Returns all CouchDB documents in DB, in alist form.")
@@ -175,53 +186,41 @@ that can be used to perform operations on it."
         (push `("limit" . ,(prin1-to-string limit)) params))
       (when include-docs
         (push `("include_docs" . "true") params))
-      (multiple-value-bind (response status-code)
-          (db-request db :uri "_all_docs" :parameters params)
-        (case status-code
-          (:ok response)
-          (otherwise (error 'unexpected-response :status-code status-code :response response)))))))
+      (handle-request response (db-request db :uri "_all_docs" :parameters params)
+        (:ok response)))))
 
 (defmessage batch-get-documents (db &rest doc-ids)
   (:documentation "Uses _all_docs to quickly fetch the given DOC-IDS in a single request.")
   (:reply ((db =database=) &rest doc-ids)
-    (multiple-value-bind (response status-code)
+    (handle-request response
         (db-request db :uri "_all_docs"
                     :parameters '(("include_docs" . "true"))
                     :method :post
                     :content (format nil "{\"foo\":[~{~S~^,~}]}" doc-ids))
-      (case status-code
-        (:ok response)
-        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
+      (:ok response))))
 
 (defmessage put-document (db id doc &key)
   (:documentation "Puts a new document into DB, using ID.")
   (:reply ((db =database=) id doc &key batch-ok-p)
-    (multiple-value-bind (response status-code)
+    (handle-request response
         (db-request db :uri id :method :put
                     :external-format-out +utf-8+
                     :content doc
                     :parameters (when batch-ok-p '(("batch" . "ok"))))
-      (case status-code
-        (:created response)
-        (:accepted response)
-        (:conflict (error 'document-conflict))
-        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
+      ((:created :accepted) response)
+      (:conflict (error 'document-conflict :id id :doc doc)))))
 
 (defmessage delete-document (db id revision)
   (:documentation "Deletes an existing document.")
   (:reply ((db =database=) id revision)
-    (multiple-value-bind (response status-code)
-        (db-request db :uri (format nil "~A?rev=~A" id revision) :method :delete)
-      (case status-code
-        (:ok response)
-        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
+    (handle-request response (db-request db :uri (format nil "~A?rev=~A" id revision) :method :delete)
+      (:ok response))))
 
 (defmessage copy-document (db from-id to-id &key)
+  (:documentation "Copies a document's content in-database.")
   (:reply ((db =database=) from-id to-id &key revision)
-    (multiple-value-bind (response status-code)
+    (handle-request response
         (db-request db :uri from-id :method :copy
                     :additional-headers `(("Destination" . ,to-id))
                     :parameters `(,(when revision `(("rev" . ,revision)))))
-      (case status-code
-        (:created response)
-        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
+      (:created response))))
