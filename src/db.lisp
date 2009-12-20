@@ -59,10 +59,20 @@
 (defproto =database= ()
   ((host "127.0.0.1")
    (port 5984)
-   (name nil))
+   (name nil)
+   (db-namestring nil))
   :documentation
   "Base database prototype. These objects represent the information required in order to communicate
 with a particular CouchDB database.")
+(defreply (setf host) :after (new-value (db =database=))
+  (declare (ignore new-value))
+  (setf (db-namestring db) (db->url db)))
+(defreply (setf port) :after (new-value (db =database=))
+  (declare (ignore new-value))
+  (setf (db-namestring db) (db->url db)))
+(defreply (setf name) :after (new-value (db =database=))
+  (declare (ignore new-value))
+  (setf (db-namestring db) (db->url db)))
 
 (defmessage db->url (db)
   (:documentation "Converts the connection information in DB into a URL string.")
@@ -79,7 +89,7 @@ with a particular CouchDB database.")
            (external-format-out *drakma-default-external-format*)
            parameters additional-headers)
     (multiple-value-bind (response status-code)
-        (http-request (format nil "~A/~A" (db->url db) uri) :method method :content content
+        (http-request (format nil "~A/~A" (db-namestring db) uri) :method method :content content
                       :external-format-out external-format-out
                       :content-type "application/json"
                       :parameters parameters
@@ -95,7 +105,7 @@ with a particular CouchDB database.")
     (multiple-value-bind (response status-code) (db-request db)
       (case status-code
         (:ok db)
-        (:not-found (error 'db-not-found :uri (db->url db)))
+        (:not-found (error 'db-not-found :uri (db-namestring db)))
         (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
 (defun connect-to-db (name &key (host "127.0.0.1") (port 5984) (prototype =database=))
@@ -111,7 +121,7 @@ that can be used to perform operations on it."
     (multiple-value-bind (response status-code) (db-request db :method :put)
       (case status-code
         (:created db)
-        (:precondition-failed (error 'db-already-exists :uri (db->url db)))
+        (:precondition-failed (error 'db-already-exists :uri (db-namestring db)))
         (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
 (defmessage delete-db (db &key)
@@ -120,7 +130,7 @@ that can be used to perform operations on it."
     (multiple-value-bind (response status-code) (db-request db :method :delete)
       (case status-code
         (:ok response)
-        (:not-found (error 'db-not-found :uri (db->url db)))
+        (:not-found (error 'db-not-found :uri (db-namestring db)))
         (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
 (defmessage compact-db (db)
