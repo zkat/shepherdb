@@ -128,6 +128,12 @@ that can be used to perform operations on it."
         (:precondition-failed (error 'db-already-exists :uri (db-namestring db)))
         (otherwise (error 'unexpected-response :status-code status-code :response response))))))
 
+(defun ensure-db (name &rest all-keys)
+  "Either connects to an existing database, or creates a new one.
+ Returns two values: If a new database was created, (DB-OBJECT T) is returned. Otherwise, (DB-OBJECT NIL)"
+  (handler-case (values (apply #'create-db name all-keys) t)
+    (db-already-exists () (values (apply #'connect-to-db name all-keys) nil))))
+
 (defmessage delete-db (db &key)
   (:documentation "Deletes a CouchDB database.")
   (:reply ((db =database=) &key)
