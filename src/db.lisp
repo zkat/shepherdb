@@ -172,6 +172,17 @@ that can be used to perform operations on it."
           (:ok response)
           (otherwise (error 'unexpected-response :status-code status-code :response response)))))))
 
+(defmessage batch-get-documents (db &rest doc-ids)
+  (:reply ((db =database=) &rest doc-ids)
+    (multiple-value-bind (response status-code)
+        (db-request db :uri "_all_docs"
+                    :parameters '(("include_docs" . "true"))
+                    :method :post
+                    :content (json:encode-json-alist-to-string `(("keys" . ,doc-ids))))
+      (case status-code
+        (:ok response)
+        (otherwise (error 'unexpected-response :status-code status-code :response response))))))
+
 (defmessage put-document (db id doc)
   (:documentation "Puts a new document into DB, using ID.")
   (:reply ((db =database=) id doc)
