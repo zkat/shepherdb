@@ -9,7 +9,8 @@
     (202 . :accepted)
     (404 . :not-found)
     (409 . :conflict)
-    (412 . :precondition-failed)))
+    (412 . :precondition-failed)
+    (500 . :internal-server-error)))
 
 ;;;
 ;;; Conditions
@@ -129,6 +130,7 @@ with a particular CouchDB database.")
   (:reply ((db =database=))
     (handle-request response (db-request db)
       (:ok response)
+      (:internal-server-error (error "Illegal database name: ~A" (name db)))
       (:not-found (error 'db-not-found :uri (db-namestring db))))))
 
 (defun connect-to-db (name &key (host "127.0.0.1") (port 5984) (prototype =database=))
@@ -143,6 +145,7 @@ that can be used to perform operations on it."
   (let ((db (create prototype 'host host 'port port 'name name)))
     (handle-request response (db-request db :method :put)
       (:created db)
+      (:internal-server-error (error "Illegal database name: ~A" name))
       (:precondition-failed (error 'db-already-exists :uri (db-namestring db))))))
 
 (defun ensure-db (name &rest all-keys)
@@ -186,7 +189,7 @@ that can be used to perform operations on it."
         (:ok response)))))
 
 (defmessage batch-get-documents (db &rest doc-ids)
-  (:documentation "Uses _all_docs to quickly fetch the given DOC-IDS in a single request.")
+  (:documentation "Uses _all_docs to quickly fetch the given DOC-IDs in a single request.")
   (:reply ((db =database=) &rest doc-ids)
     (handle-request response
         (db-request db :uri "_all_docs"
