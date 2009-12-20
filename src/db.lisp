@@ -155,7 +155,7 @@ that can be used to perform operations on it."
 
 (defmessage all-documents (db &key)
   (:documentation "Returns all CouchDB documents in DB, in alist form.")
-  (:reply ((db =database=) &key startkey endkey limit)
+  (:reply ((db =database=) &key startkey endkey limit include-docs)
     (let (params)
       (when startkey
         (push `("startkey" . ,(prin1-to-string startkey)) params))
@@ -163,6 +163,8 @@ that can be used to perform operations on it."
         (push `("endkey" . ,(prin1-to-string endkey)) params))
       (when limit
         (push `("limit" . ,(prin1-to-string limit)) params))
+      (when include-docs
+        (push `("include_docs" . "true") params))
       (multiple-value-bind (response status-code)
           (db-request db :uri "_all_docs"
                       :parameters params)
