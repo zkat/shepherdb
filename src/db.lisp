@@ -53,13 +53,7 @@
 ;;;
 ;;; Basic database API
 ;;;
-(defmacro define-constant (name value &optional doc)
-  "A version of DEFCONSTANT for /strict/ CL implementations."
-  ;; See <http://www.sbcl.org/manual/Defining-Constants.html>
-  `(defconstant ,name (if (boundp ',name) (symbol-value ',name) ,value)
-     ,@(when doc (list doc))))
-(define-constant +utf-8+ (make-external-format :utf-8 :eol-style :lf)
-  "Default external format for document content.")
+(defparameter +utf-8+ (make-external-format :utf-8 :eol-style :lf))
 
 (defproto =database= ()
   ((host "127.0.0.1")
