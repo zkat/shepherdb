@@ -8,8 +8,13 @@
 (defreply smop:direct-property-value ((metaobject =persistent-metaobject=) object pname)
   (fetch-value-from-database (object-db object) object pname))
 
-(defreply (setf smop:property-value) (new-value (metaobject =persistent-metaobject=)
-                                      object property-name &key)
+(defreply smop:add-direct-property ((metaobject =persistent-metaobject=) object property-name &key transientp)
+  (if transientp
+      (call-next-reply)
+      (allocate-property-in-db (object-db object) object property-name)))
+
+(defreply (setf smop:direct-property-value) (new-value (metaobject =persistent-metaobject=) object property-name &key)
+  ;; todo - Sheeple needs to add property metaobjects so we can special-case this for transient and persistent props.
   (set-value-in-database (object-db object) object property-name new-value))
 
 (defreply smop:property-makunbound ((mo =persistent-metaobject=) object property-name)
