@@ -1,6 +1,7 @@
 (in-package :shepherdb)
 
 (defproto =persistent-metaobject= =standard-metaobject=)
+(defproto =persistent-object= =standard-object=)
 
 (defreply smop:allocate-object :before ((metaobject =persistent-metaobject=))
   (allocate-new-document-object))
