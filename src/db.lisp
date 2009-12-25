@@ -121,16 +121,19 @@
   :documentation
   "Base database prototype. These objects represent the information required in order to communicate
 with a particular CouchDB database.")
-;; These extra replies handle automatic caching of the db-namestring used by db-request.
 (defmessage host (db)
   (:reply ((db =database=))
     (server-host (server db))))
 (defmessage port (db)
   (:reply ((db =database=))
     (server-port (server db))))
+;; These extra replies handle automatic caching of the db-namestring used by db-request.
 (defreply db-namestring :around ((db =database=))
   (or (call-next-reply)
       (setf (db-namestring db) (db->url db))))
+(defreply (setf server) :after (new-val (db =database=))
+  (declare (ignore new-val))
+  (setf (db-namestring db) nil))
 
 (defmessage db->url (db)
   (:documentation "Converts the connection information in DB into a URL string.")
