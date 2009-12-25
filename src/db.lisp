@@ -202,6 +202,12 @@ that can be used to perform operations on it."
     (handle-request response (db-request db :uri "_compact" :method :post)
       (:accepted response))))
 
+(defmessage changes (db)
+  (:documentation "Returns the changes feed for DB")
+  (:reply ((db =database=))
+    (handle-request response (db-request db :uri "_changes")
+      (:ok response))))
+
 ;;;
 ;;; Documents
 ;;;
