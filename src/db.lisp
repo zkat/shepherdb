@@ -1,5 +1,9 @@
 (in-package :shepherdb)
 
+;;; utils
+(defun strcat (string &rest more-strings)
+  (apply 'concatenate 'string string more-strings))
+
 ;;;
 ;;; Status codes
 ;;;
@@ -65,28 +69,65 @@
                      (conflicting-document-id e)))))
 
 ;;;
+;;; Server API
+;;;
+(defstruct server
+  (host "127.0.0.1")
+  (port 5984))
+
+(defun server->url (server)
+  (format nil "http://~A:~A/" (server-host server) (server-port server)))
+
+(defun couch-request (server &key (uri "") (method :get) content parameters additional-headers
+                      (external-format-out *drakma-default-external-format*))
+  (multiple-value-bind (response status-code)
+      (http-request (strcat (server->url server) uri)
+                    :method method :content content
+                    :external-format-out external-format-out
+                    :content-type "application/json"
+                    :parameters parameters
+                    :additional-headers additional-headers)
+    (values response (or (cdr (assoc status-code *status-codes* :test #'=))
+                         ;; The code should never get here once we know all the
+                         ;; status codes CouchDB might return.
+                         (error "Unknown status code: ~A. HTTP Response: ~A"
+                                status-code response)))))
+
+(defun all-dbs (server)
+  (couch-request server :uri "_all_dbs"))
+
+(defun config-info (server)
+  (couch-request server :uri "_config"))
+
+(defun replicate (server source target)
+  (couch-request server :uri (format nil "_replicate?source=~A&target=~A" source target) :method :post))
+
+(defun stats (server)
+  (couch-request server :uri "_stats"))
+
+(defun active-tasks (server)
+  (couch-request server :uri "_active_tasks"))
+
+(defun get-uuids (server &key (number 10))
+  (couch-request server :uri (format nil "_uuids?count=~A" number)))
+
+;;;
 ;;; Basic database API
 ;;;
 (defparameter +utf-8+ (make-external-format :utf-8 :eol-style :lf))
 
 (defproto =database= ()
-  ((host "127.0.0.1")
-   (port 5984)
-   (name nil)
-   (db-namestring nil))
+  ((server (make-server)) name db-namestring)
   :documentation
   "Base database prototype. These objects represent the information required in order to communicate
 with a particular CouchDB database.")
 ;; These extra replies handle automatic caching of the db-namestring used by db-request.
-(defreply (setf host) :after (new-value (db =database=))
-  (declare (ignore new-value))
-  (setf (db-namestring db) (db->url db)))
-(defreply (setf port) :after (new-value (db =database=))
-  (declare (ignore new-value))
-  (setf (db-namestring db) (db->url db)))
-(defreply (setf name) :after (new-value (db =database=))
-  (declare (ignore new-value))
-  (setf (db-namestring db) (db->url db)))
+(defmessage host (db)
+  (:reply ((db =database=))
+    (server-host (server db))))
+(defmessage port (db)
+  (:reply ((db =database=))
+    (server-port (server db))))
 (defreply db-namestring :around ((db =database=))
   (or (call-next-reply)
       (setf (db-namestring db) (db->url db))))
@@ -94,39 +135,22 @@ with a particular CouchDB database.")
 (defmessage db->url (db)
   (:documentation "Converts the connection information in DB into a URL string.")
   (:reply ((db =database=))
-    (with-properties (host port name) db
-      (format nil "http://~A:~A/~A" host port name))))
+    (strcat (server->url (server db)) (name db))))
 
 ;; TODO - CouchDB places restrictions on what sort of URLs are accepted, such as everything having
 ;;        to be downcase, and only certain characters being accepted. There is also special meaning
 ;;        behing the use of /, so a mechanism to escape it in certain situations would be good.
 (defmessage db-request (db &key)
   (:documentation "Sends a CouchDB request to DB.")
-  ;; A note about this weirdness: The reason db-requests are so "unclean" is that
-  ;; we use status codes for the various CouchDB requests to figure out if we got a
-  ;; response we expected, and to detect errors. The downside of this approach is that
-  ;; we must manually specify which HTTP response each reply that calls db-request accepts.
-  ;;
-  ;; There are, though, two big advantages to this approach:
-  ;; 1. We do not need to deserialize JSON at all in order to figure out what happened.
-  ;; 2. We get very descriptive errors with minimal overhead (not having to check a JSON object)
-  ;;
-  ;; Also as a result of this decision, the code in this file does not depend on a JSON library.
-  ;; The user is free to handle serialization and deserialization themselves, and only when they need to.
   (:reply ((db =database=) &key (uri "") (method :get) content
            (external-format-out *drakma-default-external-format*)
            parameters additional-headers)
     (multiple-value-bind (response status-code)
-        (http-request (format nil "~A/~A" (db-namestring db) uri) :method method :content content
-                      :external-format-out external-format-out
-                      :content-type "application/json"
-                      :parameters parameters
-                      :additional-headers additional-headers)
-      (values response (or (cdr (assoc status-code *status-codes* :test #'=))
-                           ;; The code should never get here once we know all the
-                           ;; status codes CouchDB might return.
-                           (error "Unknown status code: ~A. HTTP Response: ~A"
-                                  status-code response))))))
+        (couch-request (format nil "~A/~A" (db-namestring db) uri) :method method :content content
+                       :external-format-out external-format-out
+                       :parameters parameters
+                       :additional-headers additional-headers)
+      (values response status-code))))
 
 (defmacro handle-request (result-var request &body expected-responses)
   (let ((status-code (gensym "STATUS-CODE-")))
